@@ -18,6 +18,7 @@ import Bar from "./pages/Bar";
 import { AdminLayout } from "./pages/admin/AdminLayout";
 import { AdminEvents } from "./pages/admin/Events";
 import { AdminMenu } from "./pages/admin/Menu";
+import AdminInventory from "./pages/admin/Inventory";
 import { AdminStaff } from "./pages/admin/Staff";
 import { AdminReports } from "./pages/admin/Reports";
 import NotFound from "./pages/NotFound";
@@ -47,6 +48,7 @@ const App = () => (
             <Route index element={<AdminEvents />} />
             <Route path="events" element={<AdminEvents />} />
             <Route path="menu" element={<AdminMenu />} />
+            <Route path="inventory" element={<AdminInventory />} />
             <Route path="staff" element={<AdminStaff />} />
             <Route path="reports" element={<AdminReports />} />
           </Route>
