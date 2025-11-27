@@ -179,7 +179,7 @@ export function AdminMenu() {
         station_type: formData.station_type,
         starting_inventory: formData.starting_inventory ? parseInt(formData.starting_inventory) : null,
         current_inventory: formData.starting_inventory ? parseInt(formData.starting_inventory) : null,
-        event_id: formData.event_id || null,
+        event_id: formData.event_id && formData.event_id !== "all" ? formData.event_id : null,
         tenant_id: profile.tenant_id,
         is_available: true,
         ...(editingItem ? { updated_by: user.id } : { created_by: user.id }),
@@ -386,7 +386,7 @@ export function AdminMenu() {
                   <SelectValue placeholder="Select event" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Events</SelectItem>
+                  <SelectItem value="all">All Events</SelectItem>
                   {events.map((event) => (
                     <SelectItem key={event.id} value={event.id}>
                       {event.name}
