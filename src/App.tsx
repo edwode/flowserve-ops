@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Setup from "./pages/Setup";
+import SetupAdmin from "./pages/SetupAdmin";
 import Waiter from "./pages/Waiter";
 import NewOrder from "./pages/NewOrder";
 import OrderDetails from "./pages/OrderDetails";
@@ -41,6 +42,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/setup-admin" element={<SetupAdmin />} />
           <Route path="/waiter" element={<Waiter />} />
           <Route path="/waiter/new-order" element={<NewOrder />} />
           <Route path="/waiter/order/:id" element={<OrderDetails />} />
