@@ -136,52 +136,98 @@ export function AdminMenu() {
 
   const handleSave = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      console.log('Starting handleSave with formData:', formData);
+      
+      // Validate required fields
+      if (!formData.name || !formData.category || !formData.price) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill in all required fields (name, category, and price)",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      const { data: profile } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user:', user?.id);
+      
+      if (!user) {
+        toast({
+          title: "Authentication Error",
+          description: "You must be logged in to create menu items",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('tenant_id')
         .eq('id', user.id)
         .single();
 
-      if (!profile?.tenant_id) throw new Error("No tenant found");
+      console.log('Profile data:', profile, 'Error:', profileError);
+
+      if (profileError || !profile?.tenant_id) {
+        toast({
+          title: "Profile Error",
+          description: "Unable to find your tenant information. Please contact support.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       const itemData = {
-        name: formData.name,
-        category: formData.category,
+        name: formData.name.trim(),
+        category: formData.category.trim(),
         price: parseFloat(formData.price),
         station_type: formData.station_type,
         starting_inventory: formData.starting_inventory ? parseInt(formData.starting_inventory) : null,
         current_inventory: formData.starting_inventory ? parseInt(formData.starting_inventory) : null,
         event_id: formData.event_id || null,
         tenant_id: profile.tenant_id,
+        is_available: true,
         ...(editingItem ? { updated_by: user.id } : { created_by: user.id }),
       };
 
+      console.log('Attempting to save item:', itemData);
+
       if (editingItem) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('menu_items')
           .update(itemData)
-          .eq('id', editingItem.id);
+          .eq('id', editingItem.id)
+          .select();
+
+        console.log('Update result:', data, 'Error:', error);
 
         if (error) throw error;
-        toast({ title: "Menu item updated" });
+        toast({ 
+          title: "Success",
+          description: "Menu item updated successfully" 
+        });
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('menu_items')
-          .insert(itemData);
+          .insert(itemData)
+          .select();
+
+        console.log('Insert result:', data, 'Error:', error);
 
         if (error) throw error;
-        toast({ title: "Menu item created" });
+        toast({ 
+          title: "Success",
+          description: "Menu item created successfully" 
+        });
       }
 
       setDialogOpen(false);
-      fetchMenuItems();
+      await fetchMenuItems();
     } catch (error: any) {
+      console.error('Error in handleSave:', error);
       toast({
         title: "Error saving menu item",
-        description: error.message,
+        description: error.message || "An unexpected error occurred",
         variant: "destructive",
       });
     }
