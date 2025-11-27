@@ -38,8 +38,10 @@ const Dashboard = () => {
             case 'drink_dispenser':
             case 'meal_dispenser':
             case 'mixologist':
-            case 'bar_staff':
               navigate('/station');
+              break;
+            case 'bar_staff':
+              navigate('/bar');
               break;
             case 'event_manager':
               navigate('/manager');
