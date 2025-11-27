@@ -23,6 +23,7 @@ import { AdminStaff } from "./pages/admin/Staff";
 import { AdminReports } from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminTables from "./pages/admin/Tables";
+import AdminAnalytics from "./pages/admin/Analytics";
 import KitchenDisplay from "./pages/KitchenDisplay";
 import NotFound from "./pages/NotFound";
 
@@ -55,6 +56,7 @@ const App = () => (
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="tables" element={<AdminTables />} />
             <Route path="staff" element={<AdminStaff />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
