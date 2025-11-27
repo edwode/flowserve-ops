@@ -8,15 +8,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Upload, Save, Palette, Bell, Clock, Receipt } from "lucide-react";
+import { Upload, Save, Palette, Bell, Clock, Receipt, DollarSign } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TenantSettings {
   id: string;
   name: string;
   logo_url: string | null;
   theme_config: any;
+  currency: string;
 }
+
+const CURRENCIES = [
+  { code: "USD", name: "US Dollar ($)", symbol: "$" },
+  { code: "EUR", name: "Euro (€)", symbol: "€" },
+  { code: "GBP", name: "British Pound (£)", symbol: "£" },
+  { code: "JPY", name: "Japanese Yen (¥)", symbol: "¥" },
+  { code: "CNY", name: "Chinese Yuan (¥)", symbol: "¥" },
+  { code: "INR", name: "Indian Rupee (₹)", symbol: "₹" },
+  { code: "AUD", name: "Australian Dollar ($)", symbol: "$" },
+  { code: "CAD", name: "Canadian Dollar ($)", symbol: "$" },
+  { code: "CHF", name: "Swiss Franc (CHF)", symbol: "CHF" },
+  { code: "SEK", name: "Swedish Krona (kr)", symbol: "kr" },
+  { code: "NZD", name: "New Zealand Dollar ($)", symbol: "$" },
+  { code: "ZAR", name: "South African Rand (R)", symbol: "R" },
+  { code: "NGN", name: "Nigerian Naira (₦)", symbol: "₦" },
+  { code: "KES", name: "Kenyan Shilling (KSh)", symbol: "KSh" },
+  { code: "AED", name: "UAE Dirham (د.إ)", symbol: "د.إ" },
+  { code: "SAR", name: "Saudi Riyal (﷼)", symbol: "﷼" },
+  { code: "BRL", name: "Brazilian Real (R$)", symbol: "R$" },
+  { code: "MXN", name: "Mexican Peso ($)", symbol: "$" },
+];
 
 const DEFAULT_HOURS = { open: "09:00", close: "17:00", closed: false };
 
@@ -112,6 +135,25 @@ export default function AdminSettings() {
     }
   };
 
+  const handleCurrencyChange = async (currency: string) => {
+    if (!settings) return;
+
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ currency })
+        .eq('id', settings.id);
+
+      if (error) throw error;
+      
+      setSettings({ ...settings, currency });
+      toast.success("Currency updated successfully");
+    } catch (error) {
+      toast.error("Failed to update currency");
+      console.error(error);
+    }
+  };
+
   const updateThemeConfig = (path: string[], value: any) => {
     if (!settings) return;
 
@@ -193,6 +235,30 @@ export default function AdminSettings() {
                   onChange={handleLogoUpload}
                   disabled={uploading}
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Currency</CardTitle>
+              <CardDescription>Set your default currency for pricing and transactions</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="currency">Default Currency</Label>
+                <Select value={settings.currency} onValueChange={handleCurrencyChange}>
+                  <SelectTrigger id="currency" className="w-full">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCIES.map((curr) => (
+                      <SelectItem key={curr.code} value={curr.code}>
+                        {curr.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
