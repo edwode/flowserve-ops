@@ -590,6 +590,70 @@ export type Database = {
           },
         ]
       }
+      staff_locations: {
+        Row: {
+          created_at: string | null
+          event_id: string
+          floor_level: number | null
+          id: string
+          last_seen: string | null
+          status: string | null
+          tenant_id: string
+          updated_at: string | null
+          user_id: string
+          x_coordinate: number
+          y_coordinate: number
+        }
+        Insert: {
+          created_at?: string | null
+          event_id: string
+          floor_level?: number | null
+          id?: string
+          last_seen?: string | null
+          status?: string | null
+          tenant_id: string
+          updated_at?: string | null
+          user_id: string
+          x_coordinate: number
+          y_coordinate: number
+        }
+        Update: {
+          created_at?: string | null
+          event_id?: string
+          floor_level?: number | null
+          id?: string
+          last_seen?: string | null
+          status?: string | null
+          tenant_id?: string
+          updated_at?: string | null
+          user_id?: string
+          x_coordinate?: number
+          y_coordinate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_locations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_locations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_locations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tables: {
         Row: {
           capacity: number
