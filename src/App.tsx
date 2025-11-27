@@ -13,6 +13,7 @@ import OrderDetails from "./pages/OrderDetails";
 import Station from "./pages/Station";
 import Cashier from "./pages/Cashier";
 import Manager from "./pages/Manager";
+import Bar from "./pages/Bar";
 import { AdminLayout } from "./pages/admin/AdminLayout";
 import { AdminEvents } from "./pages/admin/Events";
 import { AdminMenu } from "./pages/admin/Menu";
@@ -39,6 +40,7 @@ const App = () => (
           <Route path="/station" element={<Station />} />
           <Route path="/cashier" element={<Cashier />} />
           <Route path="/manager" element={<Manager />} />
+          <Route path="/bar" element={<Bar />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminEvents />} />
             <Route path="events" element={<AdminEvents />} />
