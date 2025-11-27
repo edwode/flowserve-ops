@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, DollarSign, AlertTriangle } from "lucide-react";
+import { Loader2, LogOut, DollarSign, AlertTriangle, Split } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
+import { SplitPaymentDialog } from "@/components/SplitPaymentDialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +39,14 @@ interface Order {
   profiles: {
     full_name: string | null;
   };
+  order_items?: Array<{
+    id: string;
+    quantity: number;
+    price: number;
+    menu_item: {
+      name: string;
+    };
+  }>;
 }
 
 interface OrderReturn {
@@ -70,6 +79,7 @@ const Cashier = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [splitPaymentOrder, setSplitPaymentOrder] = useState<Order | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "pos" | "transfer" | "split">("cash");
   const [splitAmounts, setSplitAmounts] = useState({
     cash: "",
@@ -131,13 +141,29 @@ const Cashier = () => {
           total_amount,
           created_at,
           served_at,
-          profiles!orders_waiter_id_fkey (full_name)
+          profiles!orders_waiter_id_fkey (full_name),
+          order_items (
+            id,
+            quantity,
+            price,
+            menu_items (name)
+          )
         `)
         .in('status', ['served', 'ready'])
         .order('served_at', { ascending: true, nullsFirst: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Transform the data to match our Order interface
+      const transformedData = (data || []).map(order => ({
+        ...order,
+        order_items: order.order_items?.map(item => ({
+          ...item,
+          menu_item: item.menu_items
+        }))
+      }));
+      
+      setOrders(transformedData);
     } catch (error: any) {
       toast({
         title: "Error loading orders",
@@ -419,10 +445,19 @@ const Cashier = () => {
                           }
                         </div>
                       </div>
-                      <Button onClick={() => handleOpenPayment(order)}>
-                        <DollarSign className="mr-2 h-4 w-4" />
-                        Process Payment
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setSplitPaymentOrder(order)}
+                        >
+                          <Split className="mr-2 h-4 w-4" />
+                          Split Bill
+                        </Button>
+                        <Button onClick={() => handleOpenPayment(order)}>
+                          <DollarSign className="mr-2 h-4 w-4" />
+                          Full Payment
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -616,6 +651,17 @@ const Cashier = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Split Payment Dialog */}
+      <SplitPaymentDialog
+        order={splitPaymentOrder}
+        open={!!splitPaymentOrder}
+        onClose={() => setSplitPaymentOrder(null)}
+        onPaymentComplete={() => {
+          fetchOrders();
+          setSplitPaymentOrder(null);
+        }}
+      />
     </div>
   );
 };
