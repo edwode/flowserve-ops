@@ -3,11 +3,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, TrendingUp, AlertTriangle, Clock, DollarSign } from "lucide-react";
+import { Loader2, LogOut, TrendingUp, AlertTriangle, Clock, DollarSign, Activity, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FloorMap } from "@/components/FloorMap";
+import { CriticalAlerts } from "@/components/CriticalAlerts";
+import { LiveOrderTracking } from "@/components/LiveOrderTracking";
 import {
   Select,
   SelectContent,
@@ -59,6 +63,7 @@ const Manager = () => {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
+  const [tenantId, setTenantId] = useState<string>("");
   const [orderStats, setOrderStats] = useState<OrderStats>({
     pending: 0,
     dispatched: 0,
@@ -78,7 +83,26 @@ const Manager = () => {
 
   useEffect(() => {
     fetchEvents();
+    fetchTenantId();
   }, []);
+
+  const fetchTenantId = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single();
+        if (data?.tenant_id) {
+          setTenantId(data.tenant_id);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching tenant ID:", error);
+    }
+  };
 
   useEffect(() => {
     if (selectedEvent) {
@@ -346,27 +370,35 @@ const Manager = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Critical Alerts Overlay */}
+      {selectedEvent && tenantId && (
+        <CriticalAlerts eventId={selectedEvent} tenantId={tenantId} />
+      )}
+
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
         <div className="flex items-center justify-between p-4">
-          <div className="flex-1">
-            <h1 className="text-xl font-bold">Event Manager Dashboard</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                <SelectTrigger className="w-[250px] h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {events.map(event => (
-                    <SelectItem key={event.id} value={event.id}>
-                      {event.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Badge variant="secondary" className="text-xs">
-                Live
-              </Badge>
+          <div className="flex items-center gap-3">
+            <Activity className="h-6 w-6 text-primary animate-pulse" />
+            <div className="flex-1">
+              <h1 className="text-xl font-bold">Real-Time Dashboard</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <Select value={selectedEvent} onValueChange={setSelectedEvent}>
+                  <SelectTrigger className="w-[250px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {events.map(event => (
+                      <SelectItem key={event.id} value={event.id}>
+                        {event.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Badge variant="secondary" className="text-xs animate-pulse">
+                  Live
+                </Badge>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -380,9 +412,19 @@ const Manager = () => {
 
       {/* Content */}
       <div className="p-4 space-y-4">
+        {/* Tabs Navigation */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="live-orders">Live Orders</TabsTrigger>
+            <TabsTrigger value="floor-map">Floor Map</TabsTrigger>
+          </TabsList>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-4 mt-4">
         {/* Performance Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="p-4">
+          <Card className="p-4 transition-all duration-300 hover:shadow-lg animate-fade-in" style={{ animationDelay: '0.1s' }}>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <TrendingUp className="h-4 w-4" />
               Total Orders
@@ -390,7 +432,7 @@ const Manager = () => {
             <div className="text-2xl font-bold">{metrics.totalOrders}</div>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-4 transition-all duration-300 hover:shadow-lg animate-fade-in" style={{ animationDelay: '0.2s' }}>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <DollarSign className="h-4 w-4" />
               Revenue
@@ -398,7 +440,7 @@ const Manager = () => {
             <div className="text-2xl font-bold">${metrics.totalRevenue.toFixed(0)}</div>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-4 transition-all duration-300 hover:shadow-lg animate-fade-in" style={{ animationDelay: '0.3s' }}>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <Clock className="h-4 w-4" />
               Avg to Ready
@@ -406,7 +448,7 @@ const Manager = () => {
             <div className="text-2xl font-bold">{metrics.avgOrderToReady.toFixed(1)}m</div>
           </Card>
 
-          <Card className="p-4">
+          <Card className="p-4 transition-all duration-300 hover:shadow-lg animate-fade-in" style={{ animationDelay: '0.4s' }}>
             <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
               <Clock className="h-4 w-4" />
               Avg to Paid
@@ -445,7 +487,7 @@ const Manager = () => {
               <span className="text-muted-foreground">Active Orders</span>
               <span className="font-semibold">{totalActive} / {metrics.totalOrders}</span>
             </div>
-            <Progress value={(totalActive / metrics.totalOrders) * 100} />
+            <Progress value={(totalActive / metrics.totalOrders) * 100} className="transition-all duration-500" />
           </div>
         </Card>
 
@@ -494,7 +536,7 @@ const Manager = () => {
                   </div>
                   <Progress 
                     value={total > 0 ? ((station.dispatched + station.ready) / total) * 100 : 0} 
-                    className="mt-2"
+                    className="mt-2 transition-all duration-500"
                   />
                 </div>
               );
@@ -510,16 +552,16 @@ const Manager = () => {
 
         {/* Out of Stock Alerts */}
         {outOfStock.length > 0 && (
-          <Card className="p-4 border-destructive/50">
+          <Card className="p-4 border-destructive/50 animate-fade-in">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
+              <AlertTriangle className="h-5 w-5 animate-pulse" />
               Out of Stock Items ({outOfStock.length})
             </h2>
             <div className="space-y-2">
               {outOfStock.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-2 bg-destructive/10 rounded-md"
+                  className="flex items-center justify-between p-2 bg-destructive/10 rounded-md animate-fade-in"
                 >
                   <div>
                     <div className="font-medium">{item.name}</div>
@@ -533,6 +575,33 @@ const Manager = () => {
             </div>
           </Card>
         )}
+        </TabsContent>
+
+        {/* Live Orders Tab */}
+        <TabsContent value="live-orders" className="mt-4">
+          {selectedEvent && tenantId && (
+            <LiveOrderTracking eventId={selectedEvent} tenantId={tenantId} />
+          )}
+        </TabsContent>
+
+        {/* Floor Map Tab */}
+        <TabsContent value="floor-map" className="mt-4">
+          {selectedEvent && tenantId && (
+            <Card className="p-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Staff Location Tracking
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Real-time positions of active staff members
+                </p>
+              </div>
+              <FloorMap eventId={selectedEvent} tenantId={tenantId} />
+            </Card>
+          )}
+        </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
