@@ -110,6 +110,8 @@ export function AdminMenu() {
   };
 
   const handleOpenDialog = (item?: MenuItem) => {
+    console.log("handleOpenDialog called", { item });
+
     if (item) {
       setEditingItem(item);
       setFormData({
@@ -131,6 +133,7 @@ export function AdminMenu() {
         event_id: "",
       });
     }
+
     setDialogOpen(true);
   };
 
