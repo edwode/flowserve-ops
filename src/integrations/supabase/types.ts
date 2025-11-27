@@ -523,6 +523,70 @@ export type Database = {
           },
         ]
       }
+      tables: {
+        Row: {
+          capacity: number
+          cleared_at: string | null
+          created_at: string
+          current_order_id: string | null
+          event_id: string
+          id: string
+          occupied_at: string | null
+          status: string
+          table_number: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          capacity?: number
+          cleared_at?: string | null
+          created_at?: string
+          current_order_id?: string | null
+          event_id: string
+          id?: string
+          occupied_at?: string | null
+          status?: string
+          table_number: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          capacity?: number
+          cleared_at?: string | null
+          created_at?: string
+          current_order_id?: string | null
+          event_id?: string
+          id?: string
+          occupied_at?: string | null
+          status?: string
+          table_number?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tables_current_order_id_fkey"
+            columns: ["current_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tables_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tables_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           created_at: string

@@ -1,0 +1,534 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { Users, Clock, ArrowRightLeft, Plus } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+
+interface Table {
+  id: string;
+  table_number: string;
+  capacity: number;
+  status: "available" | "occupied" | "needs_cleaning" | "reserved";
+  current_order_id: string | null;
+  occupied_at: string | null;
+  cleared_at: string | null;
+  order?: {
+    order_number: string;
+    guest_name: string | null;
+    waiter: {
+      full_name: string | null;
+    };
+  };
+}
+
+interface Event {
+  id: string;
+  name: string;
+}
+
+export default function Tables() {
+  const [tables, setTables] = useState<Table[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [newTableNumber, setNewTableNumber] = useState("");
+  const [newTableCapacity, setNewTableCapacity] = useState("4");
+  const [reassignOrderId, setReassignOrderId] = useState<string | null>(null);
+  const [reassignToTable, setReassignToTable] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      fetchTables();
+      subscribeToTables();
+    }
+    return () => {
+      supabase.removeAllChannels();
+    };
+  }, [selectedEvent]);
+
+  const fetchEvents = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("event_date", { ascending: false });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch events",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEvents(data || []);
+    if (data && data.length > 0) {
+      setSelectedEvent(data[0].id);
+    }
+  };
+
+  const fetchTables = async () => {
+    if (!selectedEvent) return;
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("tables")
+      .select(
+        `
+        *,
+        order:orders!current_order_id (
+          order_number,
+          guest_name,
+          waiter:profiles!waiter_id (
+            full_name
+          )
+        )
+      `
+      )
+      .eq("event_id", selectedEvent)
+      .order("table_number");
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch tables",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
+    setTables((data || []) as Table[]);
+    setLoading(false);
+  };
+
+  const subscribeToTables = () => {
+    const channel = supabase
+      .channel("tables-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tables",
+          filter: `event_id=eq.${selectedEvent}`,
+        },
+        () => {
+          fetchTables();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "available":
+        return "bg-green-500";
+      case "occupied":
+        return "bg-red-500";
+      case "needs_cleaning":
+        return "bg-yellow-500";
+      case "reserved":
+        return "bg-blue-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    return status.replace("_", " ").toUpperCase();
+  };
+
+  const getTurnoverTime = (occupiedAt: string | null, clearedAt: string | null) => {
+    if (!occupiedAt) return null;
+    
+    const endTime = clearedAt ? new Date(clearedAt) : new Date();
+    const startTime = new Date(occupiedAt);
+    const diffMs = endTime.getTime() - startTime.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    return `${diffMins} min`;
+  };
+
+  const addTable = async () => {
+    if (!newTableNumber || !selectedEvent) return;
+
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", session.session.user.id)
+      .single();
+
+    if (!profile) return;
+
+    const { error } = await supabase.from("tables").insert({
+      tenant_id: profile.tenant_id,
+      event_id: selectedEvent,
+      table_number: newTableNumber,
+      capacity: parseInt(newTableCapacity),
+      status: "available",
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add table",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Table added successfully",
+    });
+
+    setNewTableNumber("");
+    setNewTableCapacity("4");
+    fetchTables();
+  };
+
+  const updateTableStatus = async (tableId: string, status: string) => {
+    const updates: any = { status };
+    
+    if (status === "available") {
+      updates.current_order_id = null;
+      updates.cleared_at = new Date().toISOString();
+    } else if (status === "occupied") {
+      updates.occupied_at = new Date().toISOString();
+    }
+
+    const { error } = await supabase
+      .from("tables")
+      .update(updates)
+      .eq("id", tableId);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update table status",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Table status updated",
+    });
+  };
+
+  const reassignOrder = async () => {
+    if (!reassignOrderId || !reassignToTable) return;
+
+    // Update the order's table number
+    const newTable = tables.find((t) => t.id === reassignToTable);
+    if (!newTable) return;
+
+    const { error: orderError } = await supabase
+      .from("orders")
+      .update({ table_number: newTable.table_number })
+      .eq("id", reassignOrderId);
+
+    if (orderError) {
+      toast({
+        title: "Error",
+        description: "Failed to reassign order",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Update old table
+    const oldTable = tables.find((t) => t.current_order_id === reassignOrderId);
+    if (oldTable) {
+      await supabase
+        .from("tables")
+        .update({ 
+          current_order_id: null, 
+          status: "needs_cleaning",
+          cleared_at: new Date().toISOString()
+        })
+        .eq("id", oldTable.id);
+    }
+
+    // Update new table
+    await supabase
+      .from("tables")
+      .update({ 
+        current_order_id: reassignOrderId, 
+        status: "occupied",
+        occupied_at: new Date().toISOString()
+      })
+      .eq("id", reassignToTable);
+
+    toast({
+      title: "Success",
+      description: "Order reassigned successfully",
+    });
+
+    setReassignOrderId(null);
+    setReassignToTable("");
+    fetchTables();
+  };
+
+  const occupiedTables = tables.filter((t) => t.status === "occupied").length;
+  const avgTurnoverTime = tables
+    .filter((t) => t.occupied_at && t.cleared_at)
+    .reduce((acc, t) => {
+      const time = getTurnoverTime(t.occupied_at, t.cleared_at);
+      return acc + (time ? parseInt(time) : 0);
+    }, 0) / tables.filter((t) => t.occupied_at && t.cleared_at).length || 0;
+
+  const totalGuests = tables
+    .filter((t) => t.status === "occupied")
+    .reduce((acc, t) => acc + t.capacity, 0);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Table Management</h1>
+        <div className="flex gap-4">
+          <Select value={selectedEvent} onValueChange={setSelectedEvent}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Select Event" />
+            </SelectTrigger>
+            <SelectContent>
+              {events.map((event) => (
+                <SelectItem key={event.id} value={event.id}>
+                  {event.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Table
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Table</DialogTitle>
+                <DialogDescription>
+                  Add a new table to the event
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="table-number">Table Number</Label>
+                  <Input
+                    id="table-number"
+                    value={newTableNumber}
+                    onChange={(e) => setNewTableNumber(e.target.value)}
+                    placeholder="e.g., T1, A-5"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="capacity">Capacity</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    value={newTableCapacity}
+                    onChange={(e) => setNewTableCapacity(e.target.value)}
+                    min="1"
+                  />
+                </div>
+                <Button onClick={addTable} className="w-full">
+                  Add Table
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Occupied Tables</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {occupiedTables} / {tables.length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Guests</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalGuests}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Avg Turnover</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {avgTurnoverTime ? `${Math.round(avgTurnoverTime)} min` : "N/A"}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {tables.map((table) => (
+          <Card key={table.id} className="relative">
+            <CardHeader>
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-xl">Table {table.table_number}</CardTitle>
+                <Badge className={getStatusColor(table.status)}>
+                  {getStatusLabel(table.status)}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <Users className="w-4 h-4" />
+                <span>Capacity: {table.capacity}</span>
+              </div>
+
+              {table.status === "occupied" && table.order && (
+                <>
+                  <div className="text-sm">
+                    <p className="font-semibold">{table.order.order_number}</p>
+                    <p className="text-muted-foreground">{table.order.guest_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Waiter: {table.order.waiter.full_name}
+                    </p>
+                  </div>
+                  {table.occupied_at && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span>
+                        {formatDistanceToNow(new Date(table.occupied_at), { addSuffix: true })}
+                      </span>
+                    </div>
+                  )}
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setReassignOrderId(table.current_order_id)}
+                      >
+                        <ArrowRightLeft className="w-4 h-4 mr-2" />
+                        Reassign
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Reassign Order</DialogTitle>
+                        <DialogDescription>
+                          Move this order to a different table
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Select Table</Label>
+                          <Select value={reassignToTable} onValueChange={setReassignToTable}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose table" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tables
+                                .filter((t) => t.status === "available" && t.id !== table.id)
+                                .map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    Table {t.table_number} (Capacity: {t.capacity})
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button onClick={reassignOrder} className="w-full">
+                          Confirm Reassignment
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </>
+              )}
+
+              <div className="flex gap-2">
+                {table.status !== "available" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => updateTableStatus(table.id, "available")}
+                    className="flex-1"
+                  >
+                    Clear
+                  </Button>
+                )}
+                {table.status === "available" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => updateTableStatus(table.id, "reserved")}
+                    className="flex-1"
+                  >
+                    Reserve
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {tables.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No tables found. Add tables to get started.</p>
+        </div>
+      )}
+    </div>
+  );
+}
