@@ -432,30 +432,45 @@ export type Database = {
           amount: number
           confirmed_by: string | null
           created_at: string
+          guest_identifier: string | null
           id: string
           notes: string | null
+          notes_metadata: Json | null
           order_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: string | null
+          split_session_id: string | null
+          split_type: string | null
           tenant_id: string
         }
         Insert: {
           amount: number
           confirmed_by?: string | null
           created_at?: string
+          guest_identifier?: string | null
           id?: string
           notes?: string | null
+          notes_metadata?: Json | null
           order_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status?: string | null
+          split_session_id?: string | null
+          split_type?: string | null
           tenant_id: string
         }
         Update: {
           amount?: number
           confirmed_by?: string | null
           created_at?: string
+          guest_identifier?: string | null
           id?: string
           notes?: string | null
+          notes_metadata?: Json | null
           order_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          payment_status?: string | null
+          split_session_id?: string | null
+          split_type?: string | null
           tenant_id?: string
         }
         Relationships: [
@@ -516,6 +531,58 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      split_payment_items: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          order_item_id: string
+          payment_id: string
+          quantity: number
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          order_item_id: string
+          payment_id: string
+          quantity?: number
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          order_item_id?: string
+          payment_id?: string
+          quantity?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "split_payment_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "split_payment_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "split_payment_items_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -668,6 +735,20 @@ export type Database = {
     }
     Functions: {
       generate_order_number: { Args: { _event_id: string }; Returns: string }
+      get_order_payment_summary: {
+        Args: { _order_id: string }
+        Returns: {
+          is_fully_paid: boolean
+          payment_count: number
+          remaining_balance: number
+          total_amount: number
+          total_paid: number
+        }[]
+      }
+      get_order_remaining_balance: {
+        Args: { _order_id: string }
+        Returns: number
+      }
       get_user_tenant: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
