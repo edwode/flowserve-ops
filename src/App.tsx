@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Setup from "./pages/Setup";
 import Waiter from "./pages/Waiter";
 import NewOrder from "./pages/NewOrder";
+import OrderDetails from "./pages/OrderDetails";
 import Station from "./pages/Station";
 import Cashier from "./pages/Cashier";
 import NotFound from "./pages/NotFound";
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/setup" element={<Setup />} />
           <Route path="/waiter" element={<Waiter />} />
           <Route path="/waiter/new-order" element={<NewOrder />} />
+          <Route path="/waiter/order/:id" element={<OrderDetails />} />
           <Route path="/station" element={<Station />} />
           <Route path="/cashier" element={<Cashier />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
