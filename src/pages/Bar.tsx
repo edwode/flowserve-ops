@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, LogOut, Plus, Minus, DollarSign, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -361,9 +362,12 @@ const Bar = () => {
             <h1 className="text-xl font-bold">Bar Station</h1>
             <p className="text-sm text-muted-foreground">Quick service & payment</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleSignOut}>
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
 
