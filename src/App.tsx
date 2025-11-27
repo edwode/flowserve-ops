@@ -23,6 +23,7 @@ import { AdminStaff } from "./pages/admin/Staff";
 import { AdminReports } from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminTables from "./pages/admin/Tables";
+import KitchenDisplay from "./pages/KitchenDisplay";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const App = () => (
           <Route path="/cashier" element={<Cashier />} />
           <Route path="/manager" element={<Manager />} />
           <Route path="/bar" element={<Bar />} />
+          <Route path="/kds" element={<KitchenDisplay />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminEvents />} />
             <Route path="events" element={<AdminEvents />} />
