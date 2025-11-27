@@ -1,4 +1,4 @@
-import { Calendar, Users, UtensilsCrossed, BarChart3, Settings } from "lucide-react";
+import { Calendar, Users, UtensilsCrossed, BarChart3, Settings, Package } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -16,6 +16,7 @@ import {
 const adminItems = [
   { title: "Events", url: "/admin/events", icon: Calendar },
   { title: "Menu Items", url: "/admin/menu", icon: UtensilsCrossed },
+  { title: "Inventory", url: "/admin/inventory", icon: Package },
   { title: "Staff & Roles", url: "/admin/staff", icon: Users },
   { title: "Reports", url: "/admin/reports", icon: BarChart3 },
   { title: "Settings", url: "/admin/settings", icon: Settings },
