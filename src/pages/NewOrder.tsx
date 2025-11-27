@@ -10,6 +10,10 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OfflineStorage } from "@/lib/offlineStorage";
+import { offlineQueue } from "@/lib/offlineQueue";
 
 interface Event {
   id: string;
@@ -33,12 +37,14 @@ interface CartItem extends MenuItem {
 const NewOrder = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isOnline } = useOnlineStatus();
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [usingCache, setUsingCache] = useState(false);
   
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [tableNumber, setTableNumber] = useState("");
@@ -83,6 +89,16 @@ const NewOrder = () => {
 
   const fetchMenuItems = async () => {
     try {
+      // Try cache first if offline
+      if (!isOnline) {
+        const cachedMenu = OfflineStorage.getMenu();
+        if (cachedMenu) {
+          setMenuItems(cachedMenu);
+          setUsingCache(true);
+          return;
+        }
+      }
+
       const { data, error } = await supabase
         .from('menu_items')
         .select('*')
@@ -91,13 +107,30 @@ const NewOrder = () => {
         .order('category', { ascending: true });
 
       if (error) throw error;
-      setMenuItems(data || []);
+      
+      const items = data || [];
+      setMenuItems(items);
+      setUsingCache(false);
+      
+      // Cache menu items for this event
+      OfflineStorage.saveMenu(items);
     } catch (error: any) {
-      toast({
-        title: "Error loading menu",
-        description: error.message,
-        variant: "destructive",
-      });
+      // Try cache on error
+      const cachedMenu = OfflineStorage.getMenu();
+      if (cachedMenu) {
+        setMenuItems(cachedMenu);
+        setUsingCache(true);
+        toast({
+          title: "Using cached menu",
+          description: "Showing previously loaded menu items",
+        });
+      } else {
+        toast({
+          title: "Error loading menu",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -151,6 +184,30 @@ const NewOrder = () => {
         .single();
 
       if (!profile?.tenant_id) throw new Error("No tenant found");
+
+      // If offline, queue the order
+      if (!isOnline) {
+        const orderData = {
+          event_id: selectedEvent,
+          waiter_id: user.id,
+          tenant_id: profile.tenant_id,
+          table_number: tableNumber,
+          guest_name: guestName || null,
+          status: 'pending',
+          total_amount: getTotalAmount(),
+          cart: cart,
+        };
+
+        offlineQueue.addToQueue('order', orderData);
+
+        toast({
+          title: "Order queued",
+          description: "Order will be submitted when connection is restored",
+        });
+
+        navigate('/waiter');
+        return;
+      }
 
       // Generate order number
       const { data: orderNumber, error: orderNumError } = await supabase
@@ -232,10 +289,11 @@ const NewOrder = () => {
           <Button variant="ghost" size="icon" onClick={() => navigate('/waiter')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl font-bold">New Order</h1>
             <p className="text-sm text-muted-foreground">Create a new order</p>
           </div>
+          <OfflineIndicator />
         </div>
       </div>
 

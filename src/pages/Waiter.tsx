@@ -7,6 +7,10 @@ import { Loader2, Plus, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OfflineStorage } from "@/lib/offlineStorage";
+import { offlineQueue } from "@/lib/offlineQueue";
 
 interface Order {
   id: string;
@@ -21,35 +25,62 @@ interface Order {
 const Waiter = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isOnline } = useOnlineStatus();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usingCache, setUsingCache] = useState(false);
 
   useEffect(() => {
     fetchOrders();
     
-    // Subscribe to realtime updates
-    const channel = supabase
-      .channel('waiter-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders'
-        },
-        () => {
-          fetchOrders();
-        }
-      )
-      .subscribe();
+    // Subscribe to realtime updates only when online
+    let channel: any = null;
+    if (isOnline) {
+      channel = supabase
+        .channel('waiter-orders')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders'
+          },
+          () => {
+            fetchOrders();
+          }
+        )
+        .subscribe();
+    }
+
+    // Listen for sync requests
+    const handleProcessRequest = (event: CustomEvent) => {
+      const { request, resolve } = event.detail;
+      processQueuedRequest(request).then(resolve);
+    };
+
+    window.addEventListener('process-queued-request', handleProcessRequest as EventListener);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+      window.removeEventListener('process-queued-request', handleProcessRequest as EventListener);
     };
-  }, []);
+  }, [isOnline]);
 
   const fetchOrders = async () => {
     try {
+      // Try to load from cache first if offline
+      if (!isOnline) {
+        const cachedOrders = OfflineStorage.getOrders();
+        if (cachedOrders) {
+          setOrders(cachedOrders);
+          setUsingCache(true);
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -61,15 +92,65 @@ const Waiter = () => {
         .limit(20);
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      const ordersData = data || [];
+      setOrders(ordersData);
+      setUsingCache(false);
+      
+      // Cache the orders for offline use
+      OfflineStorage.saveOrders(ordersData);
     } catch (error: any) {
-      toast({
-        title: "Error fetching orders",
-        description: error.message,
-        variant: "destructive",
-      });
+      // If online request fails, try cache
+      const cachedOrders = OfflineStorage.getOrders();
+      if (cachedOrders) {
+        setOrders(cachedOrders);
+        setUsingCache(true);
+        toast({
+          title: "Using cached data",
+          description: "Showing previously loaded orders",
+        });
+      } else {
+        toast({
+          title: "Error fetching orders",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const processQueuedRequest = async (request: any): Promise<boolean> => {
+    try {
+      if (request.type === 'order') {
+        // Process order creation
+        const { error } = await supabase
+          .from('orders')
+          .insert(request.data);
+        
+        if (error) throw error;
+        
+        // Refresh orders
+        await fetchOrders();
+        return true;
+      } else if (request.type === 'update') {
+        // Process order update
+        const { error } = await supabase
+          .from('orders')
+          .update(request.data.updates)
+          .eq('id', request.data.id);
+        
+        if (error) throw error;
+        
+        // Refresh orders
+        await fetchOrders();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to process queued request:', error);
+      return false;
     }
   };
 
@@ -113,6 +194,7 @@ const Waiter = () => {
             <p className="text-sm text-muted-foreground">Manage your orders</p>
           </div>
           <div className="flex items-center gap-2">
+            <OfflineIndicator />
             <NotificationBell />
             <Button variant="ghost" size="icon" onClick={handleSignOut}>
               <LogOut className="h-5 w-5" />
@@ -135,7 +217,14 @@ const Waiter = () => {
 
         {/* Orders List */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Recent Orders</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Recent Orders</h2>
+            {usingCache && (
+              <Badge variant="outline" className="text-xs">
+                Cached Data
+              </Badge>
+            )}
+          </div>
           
           {orders.length === 0 ? (
             <Card className="p-8 text-center">
