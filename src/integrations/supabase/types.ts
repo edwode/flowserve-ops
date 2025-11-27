@@ -735,6 +735,16 @@ export type Database = {
     }
     Functions: {
       generate_order_number: { Args: { _event_id: string }; Returns: string }
+      get_category_performance: {
+        Args: { _end_date: string; _start_date: string; _tenant_id: string }
+        Returns: {
+          avg_item_price: number
+          category: string
+          percentage_of_total: number
+          total_items: number
+          total_revenue: number
+        }[]
+      }
       get_order_payment_summary: {
         Args: { _order_id: string }
         Returns: {
@@ -749,7 +759,66 @@ export type Database = {
         Args: { _order_id: string }
         Returns: number
       }
+      get_peak_hours_analysis: {
+        Args: { _end_date: string; _start_date: string; _tenant_id: string }
+        Returns: {
+          avg_order_value: number
+          hour: number
+          order_count: number
+          total_revenue: number
+        }[]
+      }
+      get_popular_items: {
+        Args: {
+          _end_date: string
+          _limit?: number
+          _start_date: string
+          _tenant_id: string
+        }
+        Returns: {
+          avg_price: number
+          category: string
+          item_id: string
+          item_name: string
+          order_count: number
+          total_quantity: number
+          total_revenue: number
+        }[]
+      }
+      get_revenue_trends: {
+        Args: { _end_date: string; _start_date: string; _tenant_id: string }
+        Returns: {
+          avg_order_value: number
+          date: string
+          total_orders: number
+          total_revenue: number
+          unique_tables: number
+        }[]
+      }
+      get_station_efficiency: {
+        Args: { _end_date: string; _start_date: string; _tenant_id: string }
+        Returns: {
+          avg_prep_time_minutes: number
+          efficiency_percentage: number
+          items_delayed: number
+          items_on_time: number
+          station_type: string
+          total_items: number
+        }[]
+      }
       get_user_tenant: { Args: { _user_id: string }; Returns: string }
+      get_waiter_performance: {
+        Args: { _end_date: string; _start_date: string; _tenant_id: string }
+        Returns: {
+          avg_order_value: number
+          avg_table_turnover_minutes: number
+          total_items: number
+          total_orders: number
+          total_revenue: number
+          waiter_id: string
+          waiter_name: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
