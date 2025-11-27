@@ -22,6 +22,7 @@ import AdminInventory from "./pages/admin/Inventory";
 import { AdminStaff } from "./pages/admin/Staff";
 import { AdminReports } from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
+import AdminTables from "./pages/admin/Tables";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="events" element={<AdminEvents />} />
             <Route path="menu" element={<AdminMenu />} />
             <Route path="inventory" element={<AdminInventory />} />
+            <Route path="tables" element={<AdminTables />} />
             <Route path="staff" element={<AdminStaff />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="settings" element={<AdminSettings />} />
