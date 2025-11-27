@@ -103,15 +103,18 @@ serve(async (req) => {
 
     console.log('User created:', authData.user.id);
 
-    // Step 3: Update the profile with tenant_id
-    console.log('Updating user profile with tenant_id...');
+    // Step 3: Create/update the profile with tenant_id
+    console.log('Creating user profile with tenant_id...');
     const { error: profileError } = await supabaseClient
       .from('profiles')
-      .update({
+      .upsert({
+        id: authData.user.id,
         tenant_id: tenant.id,
         full_name: fullName || 'Admin User',
-      })
-      .eq('id', authData.user.id);
+        is_active: true,
+      }, {
+        onConflict: 'id'
+      });
 
     if (profileError) {
       console.error('Error updating profile:', profileError);
