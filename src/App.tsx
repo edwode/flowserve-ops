@@ -10,6 +10,7 @@ import Setup from "./pages/Setup";
 import Waiter from "./pages/Waiter";
 import NewOrder from "./pages/NewOrder";
 import Station from "./pages/Station";
+import Cashier from "./pages/Cashier";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/waiter" element={<Waiter />} />
           <Route path="/waiter/new-order" element={<NewOrder />} />
           <Route path="/station" element={<Station />} />
+          <Route path="/cashier" element={<Cashier />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
