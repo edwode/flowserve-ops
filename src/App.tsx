@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Setup from "./pages/Setup";
 import Waiter from "./pages/Waiter";
+import NewOrder from "./pages/NewOrder";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/waiter" element={<Waiter />} />
+          <Route path="/waiter/new-order" element={<NewOrder />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
