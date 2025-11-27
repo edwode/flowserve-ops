@@ -12,6 +12,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -243,89 +244,109 @@ export function AdminMenu() {
   }, {} as Record<string, MenuItem[]>);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Menu Items</h2>
-          <p className="text-muted-foreground">Manage menu items and inventory</p>
+    <Dialog
+      open={dialogOpen}
+      onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) {
+          setEditingItem(null);
+          setFormData({
+            name: "",
+            category: "",
+            price: "",
+            station_type: "drink_dispenser",
+            starting_inventory: "",
+            event_id: "",
+          });
+        }
+      }}
+    >
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Menu Items</h2>
+            <p className="text-muted-foreground">Manage menu items and inventory</p>
+          </div>
+          <DialogTrigger asChild>
+            <Button onClick={() => handleOpenDialog()}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Item
+            </Button>
+          </DialogTrigger>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Item
-        </Button>
-      </div>
 
-      <Tabs value={selectedEvent} onValueChange={setSelectedEvent}>
-        <TabsList>
-          <TabsTrigger value="all">All Events</TabsTrigger>
-          {events.map(event => (
-            <TabsTrigger key={event.id} value={event.id}>
-              {event.name}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <Tabs value={selectedEvent} onValueChange={setSelectedEvent}>
+          <TabsList>
+            <TabsTrigger value="all">All Events</TabsTrigger>
+            {events.map((event) => (
+              <TabsTrigger key={event.id} value={event.id}>
+                {event.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-        <TabsContent value={selectedEvent} className="space-y-4 mt-6">
-          {Object.entries(groupedItems).map(([category, items]) => (
-            <Card key={category} className="p-4">
-              <h3 className="font-semibold text-lg mb-3">{category}</h3>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {items.map(item => (
-                  <Card key={item.id} className="p-3 border">
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="font-medium">{item.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            ${item.price.toFixed(2)}
+          <TabsContent value={selectedEvent} className="space-y-4 mt-6">
+            {Object.entries(groupedItems).map(([category, items]) => (
+              <Card key={category} className="p-4">
+                <h3 className="font-semibold text-lg mb-3">{category}</h3>
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {items.map((item) => (
+                    <Card key={item.id} className="p-3 border">
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              ${item.price.toFixed(2)}
+                            </div>
                           </div>
+                          <Badge variant={item.is_available ? "default" : "secondary"}>
+                            {item.is_available ? "Available" : "Unavailable"}
+                          </Badge>
                         </div>
-                        <Badge variant={item.is_available ? "default" : "secondary"}>
-                          {item.is_available ? "Available" : "Unavailable"}
-                        </Badge>
-                      </div>
 
-                      <div className="text-xs text-muted-foreground">
-                        Station: {item.station_type.replace('_', ' ')}
-                      </div>
-
-                      {item.starting_inventory && (
                         <div className="text-xs text-muted-foreground">
-                          Inventory: {item.current_inventory} / {item.starting_inventory}
+                          Station: {item.station_type.replace("_", " ")}
                         </div>
-                      )}
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleOpenDialog(item)}
-                      >
-                        <Edit className="mr-2 h-3 w-3" />
-                        Edit
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </Card>
-          ))}
+                        {item.starting_inventory && (
+                          <div className="text-xs text-muted-foreground">
+                            Inventory: {item.current_inventory} / {item.starting_inventory}
+                          </div>
+                        )}
 
-          {Object.keys(groupedItems).length === 0 && (
-            <Card className="p-8 text-center">
-              <p className="text-muted-foreground">No menu items yet</p>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => handleOpenDialog(item)}
+                          >
+                            <Edit className="mr-2 h-3 w-3" />
+                            Edit
+                          </Button>
+                        </DialogTrigger>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </Card>
+            ))}
 
-      {/* Menu Item Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            {Object.keys(groupedItems).length === 0 && (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No menu items yet</p>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Menu Item Dialog */}
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingItem ? 'Edit Item' : 'Create Menu Item'}</DialogTitle>
+            <DialogTitle>{editingItem ? "Edit Item" : "Create Menu Item"}</DialogTitle>
             <DialogDescription>
-              {editingItem ? 'Update menu item details' : 'Add a new item to your menu'}
+              {editingItem ? "Update menu item details" : "Add a new item to your menu"}
             </DialogDescription>
           </DialogHeader>
 
@@ -334,7 +355,7 @@ export function AdminMenu() {
               <Label>Item Name *</Label>
               <Input
                 value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Coca Cola"
               />
             </div>
@@ -343,7 +364,7 @@ export function AdminMenu() {
               <Label>Category *</Label>
               <Input
                 value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
                 placeholder="Drinks, Meals, Cocktails, etc."
               />
             </div>
@@ -354,7 +375,7 @@ export function AdminMenu() {
                 type="number"
                 step="0.01"
                 value={formData.price}
-                onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                 placeholder="5.00"
               />
             </div>
@@ -363,7 +384,7 @@ export function AdminMenu() {
               <Label>Station Type *</Label>
               <Select
                 value={formData.station_type}
-                onValueChange={(value: any) => setFormData(prev => ({ ...prev, station_type: value }))}
+                onValueChange={(value: any) => setFormData((prev) => ({ ...prev, station_type: value }))}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -381,14 +402,14 @@ export function AdminMenu() {
               <Label>Event (Optional)</Label>
               <Select
                 value={formData.event_id}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, event_id: value }))}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, event_id: value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select event" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">All Events</SelectItem>
-                  {events.map(event => (
+                  {events.map((event) => (
                     <SelectItem key={event.id} value={event.id}>
                       {event.name}
                     </SelectItem>
@@ -402,7 +423,9 @@ export function AdminMenu() {
               <Input
                 type="number"
                 value={formData.starting_inventory}
-                onChange={(e) => setFormData(prev => ({ ...prev, starting_inventory: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, starting_inventory: e.target.value }))
+                }
                 placeholder="100"
               />
             </div>
@@ -412,15 +435,15 @@ export function AdminMenu() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleSave} 
+            <Button
+              onClick={handleSave}
               disabled={!formData.name || !formData.category || !formData.price}
             >
-              {editingItem ? 'Update' : 'Create'}
+              {editingItem ? "Update" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+      </div>
+    </Dialog>
   );
 }
