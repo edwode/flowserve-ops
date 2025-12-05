@@ -656,6 +656,7 @@ export type Database = {
       }
       tables: {
         Row: {
+          assigned_waiter_id: string | null
           capacity: number
           cleared_at: string | null
           created_at: string
@@ -669,6 +670,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_waiter_id?: string | null
           capacity?: number
           cleared_at?: string | null
           created_at?: string
@@ -682,6 +684,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_waiter_id?: string | null
           capacity?: number
           cleared_at?: string | null
           created_at?: string
@@ -695,6 +698,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tables_assigned_waiter_id_fkey"
+            columns: ["assigned_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tables_current_order_id_fkey"
             columns: ["current_order_id"]
