@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper to wait for a short time
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -103,23 +106,66 @@ serve(async (req) => {
 
     console.log('User created:', authData.user.id);
 
-    // Step 3: Create/update the profile with tenant_id
-    console.log('Creating user profile with tenant_id...');
-    const { error: profileError } = await supabaseClient
-      .from('profiles')
-      .upsert({
-        id: authData.user.id,
-        tenant_id: tenant.id,
-        full_name: fullName || 'Admin User',
-        is_active: true,
-      }, {
-        onConflict: 'id'
-      });
+    // Wait for the trigger to create the profile
+    await delay(500);
 
-    if (profileError) {
-      console.error('Error updating profile:', profileError);
-      throw profileError;
+    // Step 3: Update the profile with tenant_id (using update instead of upsert for reliability)
+    console.log('Updating user profile with tenant_id...');
+    
+    // First check if profile exists (created by trigger)
+    const { data: existingProfile } = await supabaseClient
+      .from('profiles')
+      .select('id')
+      .eq('id', authData.user.id)
+      .maybeSingle();
+
+    if (existingProfile) {
+      // Profile exists, update it
+      const { error: updateError } = await supabaseClient
+        .from('profiles')
+        .update({
+          tenant_id: tenant.id,
+          full_name: fullName || 'Admin User',
+          is_active: true,
+        })
+        .eq('id', authData.user.id);
+
+      if (updateError) {
+        console.error('Error updating profile:', updateError);
+        throw updateError;
+      }
+      console.log('Profile updated with tenant_id');
+    } else {
+      // Profile doesn't exist, insert it
+      const { error: insertError } = await supabaseClient
+        .from('profiles')
+        .insert({
+          id: authData.user.id,
+          tenant_id: tenant.id,
+          full_name: fullName || 'Admin User',
+          is_active: true,
+        });
+
+      if (insertError) {
+        console.error('Error inserting profile:', insertError);
+        throw insertError;
+      }
+      console.log('Profile created with tenant_id');
     }
+
+    // Verify profile was updated correctly
+    const { data: verifyProfile, error: verifyError } = await supabaseClient
+      .from('profiles')
+      .select('id, tenant_id')
+      .eq('id', authData.user.id)
+      .single();
+
+    if (verifyError || !verifyProfile?.tenant_id) {
+      console.error('Profile verification failed:', verifyError, verifyProfile);
+      throw new Error('Failed to link user profile to tenant');
+    }
+
+    console.log('Profile verified with tenant_id:', verifyProfile.tenant_id);
 
     // Step 4: Assign tenant_admin role
     console.log('Assigning tenant_admin role...');
