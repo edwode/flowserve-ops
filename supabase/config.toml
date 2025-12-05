@@ -2,3 +2,6 @@ project_id = "ddnynodyfkufubpugthe"
 
 [functions.setup-admin]
 verify_jwt = false
+
+[functions.create-staff]
+verify_jwt = true
