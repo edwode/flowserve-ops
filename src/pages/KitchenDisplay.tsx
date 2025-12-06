@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Clock, ChefHat, CheckCircle, AlertCircle, ArrowUp } from "lucide-react";
+import { Clock, ChefHat, CheckCircle, AlertCircle, ArrowUp, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,7 @@ interface Event {
 }
 
 export default function KitchenDisplay() {
+  const { user, tenantId, loading: authLoading } = useAuthGuard();
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
@@ -51,9 +53,11 @@ export default function KitchenDisplay() {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchUserStationType();
-    fetchEvents();
-  }, []);
+    if (!authLoading && user && tenantId) {
+      fetchUserStationType();
+      fetchEvents();
+    }
+  }, [authLoading, user, tenantId]);
 
   useEffect(() => {
     if (selectedEvent && stationType) {
@@ -66,22 +70,13 @@ export default function KitchenDisplay() {
   }, [selectedEvent, stationType]);
 
   const fetchUserStationType = async () => {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session.session) return;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", session.session.user.id)
-      .single();
-
-    if (!profile) return;
+    if (!user || !tenantId) return;
 
     const { data: userRole } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", session.session.user.id)
-      .eq("tenant_id", profile.tenant_id)
+      .eq("user_id", user.id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (userRole) {
@@ -259,11 +254,11 @@ export default function KitchenDisplay() {
   const pendingItems = orderItems.filter((item) => item.status === "pending");
   const preparingItems = orderItems.filter((item) => item.status === "dispatched");
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <ChefHat className="w-16 h-16 mx-auto mb-4 animate-bounce" />
+          <Loader2 className="w-16 h-16 mx-auto mb-4 animate-spin text-primary" />
           <p className="text-xl">Loading Kitchen Display...</p>
         </div>
       </div>
