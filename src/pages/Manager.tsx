@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloorMap } from "@/components/FloorMap";
 import { CriticalAlerts } from "@/components/CriticalAlerts";
 import { LiveOrderTracking } from "@/components/LiveOrderTracking";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import {
   Select,
   SelectContent,
@@ -60,10 +61,10 @@ interface PerformanceMetrics {
 const Manager = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, tenantId, loading: authLoading } = useAuthGuard();
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
-  const [tenantId, setTenantId] = useState<string>("");
   const [orderStats, setOrderStats] = useState<OrderStats>({
     pending: 0,
     dispatched: 0,
@@ -82,27 +83,10 @@ const Manager = () => {
   });
 
   useEffect(() => {
-    fetchEvents();
-    fetchTenantId();
-  }, []);
-
-  const fetchTenantId = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('tenant_id')
-          .eq('id', user.id)
-          .single();
-        if (data?.tenant_id) {
-          setTenantId(data.tenant_id);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching tenant ID:", error);
+    if (!authLoading && user) {
+      fetchEvents();
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (selectedEvent) {
@@ -358,7 +342,7 @@ const Manager = () => {
     return 'low';
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

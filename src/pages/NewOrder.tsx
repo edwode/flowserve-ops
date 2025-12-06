@@ -21,6 +21,7 @@ import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OfflineStorage } from "@/lib/offlineStorage";
 import { offlineQueue } from "@/lib/offlineQueue";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 interface Event {
   id: string;
@@ -56,6 +57,7 @@ const NewOrder = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
+  const { user, tenantId, loading: authLoading } = useAuthGuard();
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -70,8 +72,10 @@ const NewOrder = () => {
   const [guestName, setGuestName] = useState("");
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!authLoading && user) {
+      fetchData();
+    }
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (selectedEvent) {
@@ -82,13 +86,9 @@ const NewOrder = () => {
   }, [selectedEvent]);
 
   const fetchData = async () => {
+    if (!user) return;
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-
       const { data, error } = await supabase
         .from('events')
         .select('id, name, event_date')
@@ -223,23 +223,14 @@ const NewOrder = () => {
 
     setSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.tenant_id) throw new Error("No tenant found");
+      if (!user || !tenantId) throw new Error("Not authenticated");
 
       // If offline, queue the order
       if (!isOnline) {
         const orderData = {
           event_id: selectedEvent,
           waiter_id: user.id,
-          tenant_id: profile.tenant_id,
+          tenant_id: tenantId,
           table_number: tableNumber,
           guest_name: guestName || null,
           status: 'pending',
@@ -271,7 +262,7 @@ const NewOrder = () => {
           order_number: orderNumber,
           event_id: selectedEvent,
           waiter_id: user.id,
-          tenant_id: profile.tenant_id,
+          tenant_id: tenantId,
           table_number: tableNumber,
           guest_name: guestName || null,
           status: 'pending',
@@ -289,7 +280,7 @@ const NewOrder = () => {
         quantity: item.quantity,
         price: item.price,
         station_type: item.station_type as "drink_dispenser" | "meal_dispenser" | "mixologist" | "bar",
-        tenant_id: profile.tenant_id,
+        tenant_id: tenantId,
         status: 'pending' as "pending",
       }));
 
@@ -322,7 +313,7 @@ const NewOrder = () => {
     return acc;
   }, {} as Record<string, MenuItem[]>);
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

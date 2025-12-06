@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,7 @@ interface Order {
 const Bar = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, tenantId, loading: authLoading } = useAuthGuard();
   const [loading, setLoading] = useState(true);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -61,7 +63,9 @@ const Bar = () => {
   const [activeEvent, setActiveEvent] = useState<string>("");
 
   useEffect(() => {
-    fetchData();
+    if (!authLoading && user) {
+      fetchData();
+    }
     
     const channel = supabase
       .channel('bar-updates')
@@ -81,15 +85,12 @@ const Bar = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [authLoading, user]);
 
   const fetchData = async () => {
+    if (!user) return;
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
 
       // Get active event
       const { data: events } = await supabase
@@ -137,13 +138,12 @@ const Bar = () => {
   };
 
   const fetchOrders = async (eventId?: string) => {
+    if (!user) return;
+
+    const eid = eventId || activeEvent;
+    if (!eid) return;
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const eid = eventId || activeEvent;
-      if (!eid) return;
-
       const { data, error } = await supabase
         .from('orders')
         .select('*')
@@ -205,16 +205,7 @@ const Bar = () => {
 
     setProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.tenant_id) throw new Error("No tenant found");
+      if (!user || !tenantId) throw new Error("Not authenticated");
 
       // Generate order number
       const { data: orderNumber, error: orderNumError } = await supabase
@@ -229,7 +220,7 @@ const Bar = () => {
           order_number: orderNumber,
           event_id: activeEvent,
           waiter_id: user.id,
-          tenant_id: profile.tenant_id,
+          tenant_id: tenantId,
           table_number: 'BAR',
           guest_name: guestName || null,
           status: 'served',
@@ -248,7 +239,7 @@ const Bar = () => {
         quantity: item.quantity,
         price: item.price,
         station_type: item.station_type as "drink_dispenser" | "meal_dispenser" | "mixologist" | "bar",
-        tenant_id: profile.tenant_id,
+        tenant_id: tenantId,
         status: 'served' as "served",
       }));
 
@@ -281,16 +272,7 @@ const Bar = () => {
 
     setProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.tenant_id) throw new Error("No tenant found");
+      if (!user || !tenantId) throw new Error("Not authenticated");
 
       // Create payment
       const { error: paymentError } = await supabase
@@ -299,7 +281,7 @@ const Bar = () => {
           order_id: paymentDialog.id,
           amount: paymentDialog.total_amount,
           payment_method: paymentMethod,
-          tenant_id: profile.tenant_id,
+          tenant_id: tenantId,
           confirmed_by: user.id,
         });
 
@@ -345,7 +327,7 @@ const Bar = () => {
     return acc;
   }, {} as Record<string, MenuItem[]>);
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
