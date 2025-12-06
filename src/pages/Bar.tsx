@@ -46,6 +46,7 @@ interface Order {
   total_amount: number;
   status: string;
   created_at: string;
+  waiter_name?: string | null;
 }
 
 const Bar = () => {
@@ -152,6 +153,9 @@ const Bar = () => {
           order_items!inner (
             station_type,
             status
+          ),
+          profiles!orders_waiter_id_fkey (
+            full_name
           )
         `)
         .eq('event_id', eid)
@@ -163,7 +167,7 @@ const Bar = () => {
       if (error) throw error;
       
       // Remove duplicates since an order might have multiple bar items
-      const uniqueOrders = data?.reduce((acc: Order[], order) => {
+      const uniqueOrders = data?.reduce((acc: Order[], order: any) => {
         if (!acc.find(o => o.id === order.id)) {
           acc.push({
             id: order.id,
@@ -173,6 +177,7 @@ const Bar = () => {
             total_amount: order.total_amount,
             status: order.status,
             created_at: order.created_at,
+            waiter_name: order.profiles?.full_name || null,
           });
         }
         return acc;
@@ -517,7 +522,7 @@ const Bar = () => {
                       <div>
                         <div className="font-semibold">{order.order_number}</div>
                         <div className="text-sm text-muted-foreground">
-                          {order.guest_name || 'Walk-in'}
+                          {order.guest_name || (order.table_number === 'BAR' ? 'Walk-in' : order.waiter_name || 'Unknown')}
                         </div>
                       </div>
                       <Badge variant="secondary">{order.status}</Badge>
