@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import { useToast } from "@/hooks/use-toast";
 
 interface UseAuthGuardResult {
   user: User | null;
@@ -12,10 +13,12 @@ interface UseAuthGuardResult {
 
 export const useAuthGuard = (): UseAuthGuardResult => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -24,9 +27,14 @@ export const useAuthGuard = (): UseAuthGuardResult => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
 
-        // Handle sign out
-        if (event === 'SIGNED_OUT' || !currentSession) {
+        // Handle sign out - show toast if session was previously active
+        if (event === 'SIGNED_OUT' || (!currentSession && hasInitialized.current)) {
           setTenantId(null);
+          toast({
+            title: "Session expired",
+            description: "Please sign in again to continue",
+            variant: "destructive",
+          });
           navigate('/auth');
           return;
         }
@@ -51,6 +59,7 @@ export const useAuthGuard = (): UseAuthGuardResult => {
         return;
       }
 
+      hasInitialized.current = true;
       fetchTenantId(existingSession.user.id);
     });
 
