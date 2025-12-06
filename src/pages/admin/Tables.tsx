@@ -12,6 +12,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Clock, ArrowRightLeft, Plus, MapPin } from "lucide-react";
+import { Users, Clock, ArrowRightLeft, Plus, MapPin, Pencil, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Zone {
@@ -61,16 +71,43 @@ export default function Tables() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  
+  // Add Table state
   const [newTableNumber, setNewTableNumber] = useState("");
   const [newTableCapacity, setNewTableCapacity] = useState("4");
   const [newTableZone, setNewTableZone] = useState<string>("");
+  const [addTableOpen, setAddTableOpen] = useState(false);
+  
+  // Edit Table state
+  const [editingTable, setEditingTable] = useState<Table | null>(null);
+  const [editTableNumber, setEditTableNumber] = useState("");
+  const [editTableCapacity, setEditTableCapacity] = useState("");
+  const [editTableZone, setEditTableZone] = useState("");
+  const [editTableOpen, setEditTableOpen] = useState(false);
+  
+  // Delete Table state
+  const [deletingTable, setDeletingTable] = useState<Table | null>(null);
+  
+  // Add Zone state
   const [newZoneName, setNewZoneName] = useState("");
   const [newZoneDescription, setNewZoneDescription] = useState("");
   const [newZoneColor, setNewZoneColor] = useState("#6B7280");
+  const [addZoneOpen, setAddZoneOpen] = useState(false);
+  
+  // Edit Zone state
+  const [editingZone, setEditingZone] = useState<Zone | null>(null);
+  const [editZoneName, setEditZoneName] = useState("");
+  const [editZoneDescription, setEditZoneDescription] = useState("");
+  const [editZoneColor, setEditZoneColor] = useState("");
+  const [editZoneOpen, setEditZoneOpen] = useState(false);
+  
+  // Delete Zone state
+  const [deletingZone, setDeletingZone] = useState<Zone | null>(null);
+  
+  // Reassign order state
   const [reassignOrderId, setReassignOrderId] = useState<string | null>(null);
   const [reassignToTable, setReassignToTable] = useState("");
-  const [addTableOpen, setAddTableOpen] = useState(false);
-  const [addZoneOpen, setAddZoneOpen] = useState(false);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -220,8 +257,9 @@ export default function Tables() {
     return `${diffMins} min`;
   };
 
+  // ===== Zone CRUD =====
   const addZone = async () => {
-    if (!newZoneName || !selectedEvent) return;
+    if (!newZoneName.trim() || !selectedEvent) return;
 
     const { data: session } = await supabase.auth.getSession();
     if (!session.session) return;
@@ -237,8 +275,8 @@ export default function Tables() {
     const { error } = await supabase.from("zones").insert({
       tenant_id: profile.tenant_id,
       event_id: selectedEvent,
-      name: newZoneName,
-      description: newZoneDescription || null,
+      name: newZoneName.trim(),
+      description: newZoneDescription.trim() || null,
       color: newZoneColor,
     });
 
@@ -251,11 +289,7 @@ export default function Tables() {
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Zone added successfully",
-    });
-
+    toast({ title: "Success", description: "Zone added successfully" });
     setNewZoneName("");
     setNewZoneDescription("");
     setNewZoneColor("#6B7280");
@@ -263,8 +297,65 @@ export default function Tables() {
     fetchZones();
   };
 
+  const openEditZone = (zone: Zone) => {
+    setEditingZone(zone);
+    setEditZoneName(zone.name);
+    setEditZoneDescription(zone.description || "");
+    setEditZoneColor(zone.color);
+    setEditZoneOpen(true);
+  };
+
+  const updateZone = async () => {
+    if (!editingZone || !editZoneName.trim()) return;
+
+    const { error } = await supabase
+      .from("zones")
+      .update({
+        name: editZoneName.trim(),
+        description: editZoneDescription.trim() || null,
+        color: editZoneColor,
+      })
+      .eq("id", editingZone.id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.code === "23505" ? "Zone name already exists" : "Failed to update zone",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({ title: "Success", description: "Zone updated successfully" });
+    setEditZoneOpen(false);
+    setEditingZone(null);
+    fetchZones();
+    fetchTables();
+  };
+
+  const deleteZone = async () => {
+    if (!deletingZone) return;
+
+    const { error } = await supabase.from("zones").delete().eq("id", deletingZone.id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete zone",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({ title: "Success", description: "Zone deleted successfully" });
+    setDeletingZone(null);
+    fetchZones();
+    fetchTables();
+  };
+
+  // ===== Table CRUD =====
   const addTable = async () => {
-    if (!newTableNumber || !selectedEvent) return;
+    if (!newTableNumber.trim() || !selectedEvent) return;
 
     const { data: session } = await supabase.auth.getSession();
     if (!session.session) return;
@@ -280,8 +371,8 @@ export default function Tables() {
     const { error } = await supabase.from("tables").insert({
       tenant_id: profile.tenant_id,
       event_id: selectedEvent,
-      table_number: newTableNumber,
-      capacity: parseInt(newTableCapacity),
+      table_number: newTableNumber.trim(),
+      capacity: parseInt(newTableCapacity) || 4,
       status: "available",
       zone_id: newTableZone && newTableZone !== "none" ? newTableZone : null,
     });
@@ -295,15 +386,75 @@ export default function Tables() {
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Table added successfully",
-    });
-
+    toast({ title: "Success", description: "Table added successfully" });
     setNewTableNumber("");
     setNewTableCapacity("4");
     setNewTableZone("");
     setAddTableOpen(false);
+    fetchTables();
+  };
+
+  const openEditTable = (table: Table) => {
+    setEditingTable(table);
+    setEditTableNumber(table.table_number);
+    setEditTableCapacity(String(table.capacity));
+    setEditTableZone(table.zone_id || "none");
+    setEditTableOpen(true);
+  };
+
+  const updateTable = async () => {
+    if (!editingTable || !editTableNumber.trim()) return;
+
+    const { error } = await supabase
+      .from("tables")
+      .update({
+        table_number: editTableNumber.trim(),
+        capacity: parseInt(editTableCapacity) || 4,
+        zone_id: editTableZone && editTableZone !== "none" ? editTableZone : null,
+      })
+      .eq("id", editingTable.id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update table",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({ title: "Success", description: "Table updated successfully" });
+    setEditTableOpen(false);
+    setEditingTable(null);
+    fetchTables();
+  };
+
+  const deleteTable = async () => {
+    if (!deletingTable) return;
+
+    if (deletingTable.status === "occupied") {
+      toast({
+        title: "Cannot delete",
+        description: "Cannot delete an occupied table. Clear the table first.",
+        variant: "destructive",
+      });
+      setDeletingTable(null);
+      return;
+    }
+
+    const { error } = await supabase.from("tables").delete().eq("id", deletingTable.id);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete table",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({ title: "Success", description: "Table deleted successfully" });
+    setDeletingTable(null);
     fetchTables();
   };
 
@@ -331,10 +482,7 @@ export default function Tables() {
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Table status updated",
-    });
+    toast({ title: "Success", description: "Table status updated" });
   };
 
   const reassignOrder = async () => {
@@ -378,11 +526,7 @@ export default function Tables() {
       })
       .eq("id", reassignToTable);
 
-    toast({
-      title: "Success",
-      description: "Order reassigned successfully",
-    });
-
+    toast({ title: "Success", description: "Order reassigned successfully" });
     setReassignOrderId(null);
     setReassignToTable("");
     fetchTables();
@@ -400,7 +544,6 @@ export default function Tables() {
     .filter((t) => t.status === "occupied")
     .reduce((acc, t) => acc + t.capacity, 0);
 
-  // Group tables by zone
   const tablesByZone = tables.reduce((acc, table) => {
     const zoneId = table.zone_id || "unassigned";
     if (!acc[zoneId]) {
@@ -432,6 +575,7 @@ export default function Tables() {
             </SelectContent>
           </Select>
 
+          {/* Add Zone Dialog */}
           <Dialog open={addZoneOpen} onOpenChange={setAddZoneOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -485,6 +629,7 @@ export default function Tables() {
             </DialogContent>
           </Dialog>
 
+          {/* Add Table Dialog */}
           <Dialog open={addTableOpen} onOpenChange={setAddTableOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -550,19 +695,176 @@ export default function Tables() {
         </div>
       </div>
 
-      {/* Zone Legend */}
+      {/* Edit Zone Dialog */}
+      <Dialog open={editZoneOpen} onOpenChange={setEditZoneOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Zone</DialogTitle>
+            <DialogDescription>
+              Update zone details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-zone-name">Zone Name</Label>
+              <Input
+                id="edit-zone-name"
+                value={editZoneName}
+                onChange={(e) => setEditZoneName(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-zone-description">Description (Optional)</Label>
+              <Input
+                id="edit-zone-description"
+                value={editZoneDescription}
+                onChange={(e) => setEditZoneDescription(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-zone-color">Color</Label>
+              <div className="flex gap-2 items-center">
+                <Input
+                  id="edit-zone-color"
+                  type="color"
+                  value={editZoneColor}
+                  onChange={(e) => setEditZoneColor(e.target.value)}
+                  className="w-16 h-10 p-1 cursor-pointer"
+                />
+                <span className="text-sm text-muted-foreground">{editZoneColor}</span>
+              </div>
+            </div>
+            <Button onClick={updateZone} className="w-full">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Table Dialog */}
+      <Dialog open={editTableOpen} onOpenChange={setEditTableOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Table</DialogTitle>
+            <DialogDescription>
+              Update table details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-table-number">Table Number</Label>
+              <Input
+                id="edit-table-number"
+                value={editTableNumber}
+                onChange={(e) => setEditTableNumber(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-capacity">Capacity</Label>
+              <Input
+                id="edit-capacity"
+                type="number"
+                value={editTableCapacity}
+                onChange={(e) => setEditTableCapacity(e.target.value)}
+                min="1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-zone">Zone</Label>
+              <Select value={editTableZone} onValueChange={setEditTableZone}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a zone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Zone</SelectItem>
+                  {zones.map((zone) => (
+                    <SelectItem key={zone.id} value={zone.id}>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: zone.color }}
+                        />
+                        {zone.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={updateTable} className="w-full">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Zone Confirmation */}
+      <AlertDialog open={!!deletingZone} onOpenChange={(open) => !open && setDeletingZone(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Zone</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingZone?.name}"? Tables in this zone will become unassigned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteZone} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Table Confirmation */}
+      <AlertDialog open={!!deletingTable} onOpenChange={(open) => !open && setDeletingTable(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Table</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "Table {deletingTable?.table_number}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteTable} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Zone Legend with Edit/Delete */}
       {zones.length > 0 && (
         <div className="flex flex-wrap gap-3 mb-6">
           {zones.map((zone) => (
-            <div key={zone.id} className="flex items-center gap-2 px-3 py-1 bg-muted rounded-full">
+            <div key={zone.id} className="flex items-center gap-2 px-3 py-1 bg-muted rounded-full group">
               <div 
                 className="w-3 h-3 rounded-full" 
                 style={{ backgroundColor: zone.color }}
               />
               <span className="text-sm font-medium">{zone.name}</span>
               <span className="text-xs text-muted-foreground">
-                ({tablesByZone[zone.id]?.length || 0} tables)
+                ({tablesByZone[zone.id]?.length || 0})
               </span>
+              <div className="flex gap-1 ml-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => openEditZone(zone)}
+                >
+                  <Pencil className="w-3 h-3" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                  onClick={() => setDeletingZone(zone)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
             </div>
           ))}
           {tablesByZone["unassigned"]?.length > 0 && (
@@ -570,7 +872,7 @@ export default function Tables() {
               <div className="w-3 h-3 rounded-full bg-gray-400" />
               <span className="text-sm font-medium">Unassigned</span>
               <span className="text-xs text-muted-foreground">
-                ({tablesByZone["unassigned"].length} tables)
+                ({tablesByZone["unassigned"].length})
               </span>
             </div>
           )}
@@ -614,7 +916,7 @@ export default function Tables() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {tables.map((table) => (
-          <Card key={table.id} className="relative">
+          <Card key={table.id} className="relative group">
             {table.zone && (
               <div 
                 className="absolute top-0 left-0 right-0 h-1 rounded-t-lg"
@@ -632,9 +934,29 @@ export default function Tables() {
                     </div>
                   )}
                 </div>
-                <Badge className={getStatusColor(table.status)}>
-                  {getStatusLabel(table.status)}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge className={getStatusColor(table.status)}>
+                    {getStatusLabel(table.status)}
+                  </Badge>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => openEditTable(table)}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-destructive hover:text-destructive"
+                      onClick={() => setDeletingTable(table)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
