@@ -246,7 +246,7 @@ export function AdminStaff() {
     const profileSuccess = await handleManageStaff('update_profile', editingMember.id, {
       fullName: editForm.fullName,
       phone: editForm.phone,
-      zoneId: editForm.zoneId || null,
+      zoneId: editForm.zoneId === 'none' ? null : editForm.zoneId || null,
     });
 
     if (profileSuccess && editForm.role && editForm.role !== editingMember.user_roles[0]?.role) {
@@ -293,7 +293,7 @@ export function AdminStaff() {
       fullName: member.full_name || '',
       phone: member.phone || '',
       role: member.user_roles[0]?.role || '',
-      zoneId: member.zone_id || '',
+      zoneId: member.zone_id || 'none',
     });
     setEditDialogOpen(true);
   };
@@ -616,7 +616,7 @@ export function AdminStaff() {
                     <SelectValue placeholder="No zone assigned" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No zone assigned</SelectItem>
+                    <SelectItem value="none">No zone assigned</SelectItem>
                     {zones.map((zone) => (
                       <SelectItem key={zone.id} value={zone.id}>
                         <div className="flex items-center gap-2">
