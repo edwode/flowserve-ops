@@ -5,6 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, ArrowLeft, Plus, Minus, ShoppingCart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +26,17 @@ interface Event {
   id: string;
   name: string;
   event_date: string;
+}
+
+interface Table {
+  id: string;
+  table_number: string;
+  capacity: number;
+  status: string;
+  zone?: {
+    name: string;
+    color: string;
+  } | null;
 }
 
 interface MenuItem {
@@ -42,12 +60,13 @@ const NewOrder = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [usingCache, setUsingCache] = useState(false);
   
   const [selectedEvent, setSelectedEvent] = useState<string>("");
-  const [tableNumber, setTableNumber] = useState("");
+  const [selectedTable, setSelectedTable] = useState("");
   const [guestName, setGuestName] = useState("");
 
   useEffect(() => {
@@ -57,6 +76,8 @@ const NewOrder = () => {
   useEffect(() => {
     if (selectedEvent) {
       fetchMenuItems();
+      fetchTables();
+      setSelectedTable("");
     }
   }, [selectedEvent]);
 
@@ -84,6 +105,32 @@ const NewOrder = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTables = async () => {
+    if (!selectedEvent) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("tables")
+        .select(`
+          id,
+          table_number,
+          capacity,
+          status,
+          zone:zones (
+            name,
+            color
+          )
+        `)
+        .eq("event_id", selectedEvent)
+        .order("table_number");
+
+      if (error) throw error;
+      setTables((data || []) as Table[]);
+    } catch (error: any) {
+      console.error("Error fetching tables:", error);
     }
   };
 
@@ -163,14 +210,16 @@ const NewOrder = () => {
   };
 
   const handleSubmit = async () => {
-    if (!selectedEvent || !tableNumber || cart.length === 0) {
+    if (!selectedEvent || !selectedTable || cart.length === 0) {
       toast({
         title: "Missing information",
-        description: "Please select event, enter table number, and add items",
+        description: "Please select event, select a table, and add items",
         variant: "destructive",
       });
       return;
     }
+
+    const tableNumber = tables.find(t => t.id === selectedTable)?.table_number || selectedTable;
 
     setSubmitting(true);
     try {
@@ -321,13 +370,34 @@ const NewOrder = () => {
         {selectedEvent && (
           <Card className="p-4 space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="table">Table Number *</Label>
-              <Input
-                id="table"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                placeholder="e.g., T12"
-              />
+              <Label htmlFor="table">Table *</Label>
+              <Select value={selectedTable} onValueChange={setSelectedTable}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a table" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.map((table) => (
+                    <SelectItem key={table.id} value={table.id}>
+                      <div className="flex items-center gap-2">
+                        {table.zone && (
+                          <div 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: table.zone.color }}
+                          />
+                        )}
+                        <span>Table {table.table_number}</span>
+                        <span className="text-muted-foreground text-xs">
+                          ({table.capacity} seats)
+                          {table.zone && ` • ${table.zone.name}`}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {tables.length === 0 && (
+                <p className="text-xs text-muted-foreground">No tables found for this event</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="guest">Guest Name (Optional)</Label>
@@ -409,7 +479,7 @@ const NewOrder = () => {
           <Button
             className="w-full h-12"
             onClick={handleSubmit}
-            disabled={submitting || !selectedEvent || !tableNumber}
+            disabled={submitting || !selectedEvent || !selectedTable}
           >
             {submitting ? (
               <>
