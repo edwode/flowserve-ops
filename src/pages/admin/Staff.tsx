@@ -112,7 +112,6 @@ export function AdminStaff() {
           zone_id,
           event_id,
           zones (id, name, color),
-          events (id, name),
           user_roles!inner (role)
         `)
         .eq('tenant_id', profile.tenant_id)
@@ -120,11 +119,27 @@ export function AdminStaff() {
 
       if (error) throw error;
       
+      // Fetch events separately to avoid ambiguous relationship issue
+      const eventIds = (data || []).map(d => d.event_id).filter(Boolean) as string[];
+      let eventsMap: Record<string, Event> = {};
+      
+      if (eventIds.length > 0) {
+        const { data: eventsData } = await supabase
+          .from('events')
+          .select('id, name')
+          .in('id', eventIds);
+        
+        eventsMap = (eventsData || []).reduce((acc, e) => {
+          acc[e.id] = e;
+          return acc;
+        }, {} as Record<string, Event>);
+      }
+      
       // Map the response to expected format
       const mappedData = (data || []).map(item => ({
         ...item,
         zone: item.zones,
-        event: item.events,
+        event: item.event_id ? eventsMap[item.event_id] || null : null,
       }));
       setStaff(mappedData as StaffMember[]);
     } catch (error: any) {
