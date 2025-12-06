@@ -144,17 +144,40 @@ const Bar = () => {
     if (!eid) return;
 
     try {
+      // Fetch orders that have bar or mixologist items and are ready for payment
       const { data, error } = await supabase
         .from('orders')
-        .select('*')
+        .select(`
+          *,
+          order_items!inner (
+            station_type
+          )
+        `)
         .eq('event_id', eid)
-        .eq('waiter_id', user.id)
+        .in('order_items.station_type', ['bar', 'mixologist'])
         .in('status', ['served', 'ready'])
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Remove duplicates since an order might have multiple bar items
+      const uniqueOrders = data?.reduce((acc: Order[], order) => {
+        if (!acc.find(o => o.id === order.id)) {
+          acc.push({
+            id: order.id,
+            order_number: order.order_number,
+            table_number: order.table_number,
+            guest_name: order.guest_name,
+            total_amount: order.total_amount,
+            status: order.status,
+            created_at: order.created_at,
+          });
+        }
+        return acc;
+      }, []) || [];
+      
+      setOrders(uniqueOrders);
     } catch (error: any) {
       toast({
         title: "Error loading orders",
