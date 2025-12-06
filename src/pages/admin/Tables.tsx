@@ -283,7 +283,7 @@ export default function Tables() {
       table_number: newTableNumber,
       capacity: parseInt(newTableCapacity),
       status: "available",
-      zone_id: newTableZone || null,
+      zone_id: newTableZone && newTableZone !== "none" ? newTableZone : null,
     });
 
     if (error) {
@@ -526,7 +526,7 @@ export default function Tables() {
                       <SelectValue placeholder="Select a zone" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No Zone</SelectItem>
+                      <SelectItem value="none">No Zone</SelectItem>
                       {zones.map((zone) => (
                         <SelectItem key={zone.id} value={zone.id}>
                           <div className="flex items-center gap-2">
