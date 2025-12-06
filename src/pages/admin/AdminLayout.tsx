@@ -42,10 +42,10 @@ export function AdminLayout() {
         .eq('tenant_id', profile.tenant_id)
         .single();
 
-      if (!userRole || userRole.role !== 'tenant_admin') {
+      if (!userRole || (userRole.role !== 'tenant_admin' && userRole.role !== 'super_admin')) {
         toast({
           title: "Access denied",
-          description: "Only tenant admins can access this area",
+          description: "Only admins can access this area",
           variant: "destructive",
         });
         navigate('/dashboard');
