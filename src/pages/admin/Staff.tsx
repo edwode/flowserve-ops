@@ -12,11 +12,19 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Loader2, Eye, EyeOff, MoreVertical, Pencil, Key, UserX, Trash2, UserCheck } from "lucide-react";
 
+interface Zone {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface StaffMember {
   id: string;
   full_name: string | null;
   phone: string | null;
   is_active: boolean;
+  zone_id: string | null;
+  zone?: Zone | null;
   user_roles: Array<{
     role: string;
   }>;
@@ -39,6 +47,7 @@ const ASSIGNABLE_ROLES = ROLES.filter(r => r.value !== 'tenant_admin');
 export function AdminStaff() {
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -57,7 +66,7 @@ export function AdminStaff() {
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
-  const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '' });
+  const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '', zoneId: '' });
 
   // Password reset dialog state
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -67,6 +76,7 @@ export function AdminStaff() {
 
   useEffect(() => {
     fetchStaff();
+    fetchZones();
   }, []);
 
   const fetchStaff = async () => {
@@ -90,13 +100,15 @@ export function AdminStaff() {
           full_name,
           phone,
           is_active,
+          zone_id,
+          zone:zones (id, name, color),
           user_roles!inner (role)
         `)
         .eq('tenant_id', profile.tenant_id)
         .eq('user_roles.tenant_id', profile.tenant_id);
 
       if (error) throw error;
-      setStaff(data || []);
+      setStaff((data || []) as StaffMember[]);
     } catch (error: any) {
       toast({
         title: "Error loading staff",
@@ -105,6 +117,32 @@ export function AdminStaff() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchZones = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.tenant_id) return;
+
+      const { data, error } = await supabase
+        .from('zones')
+        .select('id, name, color')
+        .eq('tenant_id', profile.tenant_id)
+        .order('name');
+
+      if (error) throw error;
+      setZones(data || []);
+    } catch (error: any) {
+      console.error("Error fetching zones:", error);
     }
   };
 
@@ -208,6 +246,7 @@ export function AdminStaff() {
     const profileSuccess = await handleManageStaff('update_profile', editingMember.id, {
       fullName: editForm.fullName,
       phone: editForm.phone,
+      zoneId: editForm.zoneId || null,
     });
 
     if (profileSuccess && editForm.role && editForm.role !== editingMember.user_roles[0]?.role) {
@@ -254,6 +293,7 @@ export function AdminStaff() {
       fullName: member.full_name || '',
       phone: member.phone || '',
       role: member.user_roles[0]?.role || '',
+      zoneId: member.zone_id || '',
     });
     setEditDialogOpen(true);
   };
@@ -491,6 +531,14 @@ export function AdminStaff() {
                         {ur.role.replace(/_/g, ' ')}
                       </Badge>
                     ))}
+                    {member.zone && (
+                      <Badge 
+                        variant="outline"
+                        style={{ borderColor: member.zone.color, color: member.zone.color }}
+                      >
+                        {member.zone.name}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -556,6 +604,37 @@ export function AdminStaff() {
                 </SelectContent>
               </Select>
             </div>
+
+            {editForm.role === 'waiter' && (
+              <div className="space-y-2">
+                <Label htmlFor="editZone">Assigned Zone</Label>
+                <Select
+                  value={editForm.zoneId}
+                  onValueChange={(value) => setEditForm({ ...editForm, zoneId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No zone assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No zone assigned</SelectItem>
+                    {zones.map((zone) => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: zone.color }}
+                          />
+                          {zone.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Waiters will only see tables in their assigned zone when creating orders
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>

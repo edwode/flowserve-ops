@@ -507,6 +507,7 @@ export type Database = {
           phone: string | null
           tenant_id: string | null
           updated_at: string
+          zone_id: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -517,6 +518,7 @@ export type Database = {
           phone?: string | null
           tenant_id?: string | null
           updated_at?: string
+          zone_id?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -527,6 +529,7 @@ export type Database = {
           phone?: string | null
           tenant_id?: string | null
           updated_at?: string
+          zone_id?: string | null
         }
         Relationships: [
           {
@@ -534,6 +537,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
             referencedColumns: ["id"]
           },
         ]
