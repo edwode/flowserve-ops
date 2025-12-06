@@ -11,6 +11,7 @@ import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OfflineStorage } from "@/lib/offlineStorage";
 import { offlineQueue } from "@/lib/offlineQueue";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 
 interface Order {
   id: string;
@@ -26,12 +27,15 @@ const Waiter = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
+  const { user, loading: authLoading } = useAuthGuard();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingCache, setUsingCache] = useState(false);
 
   useEffect(() => {
-    fetchOrders();
+    if (!authLoading && user) {
+      fetchOrders();
+    }
     
     // Subscribe to realtime updates only when online
     let channel: any = null;
@@ -66,7 +70,7 @@ const Waiter = () => {
       }
       window.removeEventListener('process-queued-request', handleProcessRequest as EventListener);
     };
-  }, [isOnline]);
+  }, [isOnline, authLoading, user]);
 
   const fetchOrders = async () => {
     try {
@@ -81,7 +85,6 @@ const Waiter = () => {
         }
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data, error } = await supabase
@@ -176,7 +179,7 @@ const Waiter = () => {
     navigate('/auth');
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

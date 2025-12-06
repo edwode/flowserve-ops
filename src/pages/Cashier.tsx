@@ -11,6 +11,7 @@ import { SplitPaymentDialog } from "@/components/SplitPaymentDialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,7 @@ interface OrderReturn {
 const Cashier = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, tenantId, loading: authLoading } = useAuthGuard();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
@@ -90,7 +92,9 @@ const Cashier = () => {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    if (!authLoading && user) {
+      fetchData();
+    }
     
     const channel = supabase
       .channel('cashier-updates')
@@ -121,7 +125,7 @@ const Cashier = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [authLoading, user]);
 
   const fetchData = async () => {
     await Promise.all([fetchOrders(), fetchReturns()]);
@@ -217,16 +221,7 @@ const Cashier = () => {
 
     setProcessing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.tenant_id) throw new Error("No tenant found");
+      if (!user || !tenantId) throw new Error("Not authenticated");
 
       let paymentAmount = selectedOrder.total_amount;
       
@@ -260,7 +255,7 @@ const Cashier = () => {
               order_id: selectedOrder.id,
               amount: payment.amount,
               payment_method: payment.method as "cash" | "pos" | "transfer",
-              tenant_id: profile.tenant_id,
+              tenant_id: tenantId,
               confirmed_by: user.id,
               notes: paymentNotes || null,
             });
@@ -275,7 +270,7 @@ const Cashier = () => {
             order_id: selectedOrder.id,
             amount: paymentAmount,
             payment_method: paymentMethod,
-            tenant_id: profile.tenant_id,
+            tenant_id: tenantId,
             confirmed_by: user.id,
             notes: paymentNotes || null,
           });
@@ -362,7 +357,7 @@ const Cashier = () => {
     return cash + pos + transfer;
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
