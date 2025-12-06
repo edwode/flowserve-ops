@@ -144,18 +144,19 @@ const Bar = () => {
     if (!eid) return;
 
     try {
-      // Fetch orders that have bar or mixologist items and are ready for payment
+      // Fetch orders that have bar or mixologist items (exclude paid orders)
       const { data, error } = await supabase
         .from('orders')
         .select(`
           *,
           order_items!inner (
-            station_type
+            station_type,
+            status
           )
         `)
         .eq('event_id', eid)
         .in('order_items.station_type', ['bar', 'mixologist'])
-        .in('status', ['served', 'ready'])
+        .neq('status', 'paid')
         .order('created_at', { ascending: false })
         .limit(20);
 
