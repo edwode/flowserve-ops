@@ -80,6 +80,7 @@ const Cashier = () => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
+  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [splitPaymentOrder, setSplitPaymentOrder] = useState<Order | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "pos" | "transfer" | "split">("cash");
@@ -407,7 +408,8 @@ const Cashier = () => {
               orders.map((order) => (
                 <Card
                   key={order.id}
-                  className="p-4 hover:bg-accent/5 transition-colors"
+                  className="p-4 hover:bg-accent/5 transition-colors cursor-pointer"
+                  onClick={() => setViewingOrder(order)}
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
@@ -443,12 +445,18 @@ const Cashier = () => {
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
-                          onClick={() => setSplitPaymentOrder(order)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSplitPaymentOrder(order);
+                          }}
                         >
                           <Split className="mr-2 h-4 w-4" />
                           Split Bill
                         </Button>
-                        <Button onClick={() => handleOpenPayment(order)}>
+                        <Button onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenPayment(order);
+                        }}>
                           <DollarSign className="mr-2 h-4 w-4" />
                           Full Payment
                         </Button>
@@ -657,6 +665,71 @@ const Cashier = () => {
           setSplitPaymentOrder(null);
         }}
       />
+
+      {/* Order Details Dialog */}
+      <Dialog open={!!viewingOrder} onOpenChange={(open) => !open && setViewingOrder(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Order Details</DialogTitle>
+            <DialogDescription>
+              {viewingOrder?.order_number} • Table {viewingOrder?.table_number}
+              {viewingOrder?.guest_name && ` • ${viewingOrder.guest_name}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {viewingOrder?.order_items?.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium bg-muted px-2 py-1 rounded">
+                      {item.quantity}x
+                    </span>
+                    <span>{item.menu_item?.name}</span>
+                  </div>
+                  <span className="font-medium">
+                    ${(item.price * item.quantity).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <span className="text-lg font-semibold">Total</span>
+              <span className="text-xl font-bold">
+                ${viewingOrder?.total_amount.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setViewingOrder(null);
+                if (viewingOrder) setSplitPaymentOrder(viewingOrder);
+              }}
+            >
+              <Split className="mr-2 h-4 w-4" />
+              Split Bill
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setViewingOrder(null);
+                if (viewingOrder) handleOpenPayment(viewingOrder);
+              }}
+            >
+              <DollarSign className="mr-2 h-4 w-4" />
+              Full Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
