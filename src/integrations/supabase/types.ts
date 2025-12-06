@@ -668,6 +668,7 @@ export type Database = {
           table_number: string
           tenant_id: string
           updated_at: string
+          zone_id: string | null
         }
         Insert: {
           assigned_waiter_id?: string | null
@@ -682,6 +683,7 @@ export type Database = {
           table_number: string
           tenant_id: string
           updated_at?: string
+          zone_id?: string | null
         }
         Update: {
           assigned_waiter_id?: string | null
@@ -696,6 +698,7 @@ export type Database = {
           table_number?: string
           tenant_id?: string
           updated_at?: string
+          zone_id?: string | null
         }
         Relationships: [
           {
@@ -724,6 +727,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tables_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
             referencedColumns: ["id"]
           },
         ]
@@ -802,6 +812,54 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      zones: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          event_id: string
+          id: string
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          event_id: string
+          id?: string
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          event_id?: string
+          id?: string
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zones_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "zones_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
