@@ -26,6 +26,7 @@ import AdminSettings from "./pages/admin/Settings";
 import AdminTables from "./pages/admin/Tables";
 import AdminAnalytics from "./pages/admin/Analytics";
 import KitchenDisplay from "./pages/KitchenDisplay";
+import Documentation from "./pages/Documentation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ const App = () => (
           <Route path="/manager" element={<Manager />} />
           <Route path="/bar" element={<Bar />} />
           <Route path="/kds" element={<KitchenDisplay />} />
+          <Route path="/docs" element={<Documentation />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminEvents />} />
             <Route path="events" element={<AdminEvents />} />
