@@ -67,6 +67,7 @@ const NewOrder = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [usingCache, setUsingCache] = useState(false);
   const [waiterZoneId, setWaiterZoneId] = useState<string | null>(null);
+  const [waiterEventId, setWaiterEventId] = useState<string | null>(null);
   
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [selectedTable, setSelectedTable] = useState("");
@@ -90,25 +91,41 @@ const NewOrder = () => {
     if (!user) return;
     
     try {
-      // Fetch waiter's zone assignment
+      // Fetch waiter's zone and event assignment
       const { data: profile } = await supabase
         .from('profiles')
-        .select('zone_id')
+        .select('zone_id, event_id')
         .eq('id', user.id)
         .single();
       
       if (profile?.zone_id) {
         setWaiterZoneId(profile.zone_id);
       }
+      if (profile?.event_id) {
+        setWaiterEventId(profile.event_id);
+      }
 
-      const { data, error } = await supabase
+      // Build events query
+      let eventsQuery = supabase
         .from('events')
         .select('id, name, event_date')
         .eq('is_active', true)
         .order('event_date', { ascending: false });
 
+      // If waiter has an event assigned, filter to only that event
+      if (profile?.event_id) {
+        eventsQuery = eventsQuery.eq('id', profile.event_id);
+      }
+
+      const { data, error } = await eventsQuery;
+
       if (error) throw error;
       setEvents(data || []);
+
+      // Auto-select if only one event
+      if (data && data.length === 1) {
+        setSelectedEvent(data[0].id);
+      }
     } catch (error: any) {
       toast({
         title: "Error loading events",

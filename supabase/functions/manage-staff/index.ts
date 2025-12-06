@@ -98,8 +98,8 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case 'update_profile': {
-        const { fullName, phone, zoneId } = payload
-        console.log('Updating profile:', { fullName, phone, zoneId })
+        const { fullName, phone, zoneId, eventId } = payload
+        console.log('Updating profile:', { fullName, phone, zoneId, eventId })
         
         const { error } = await supabaseAdmin
           .from('profiles')
@@ -107,6 +107,7 @@ Deno.serve(async (req) => {
             full_name: fullName,
             phone: phone,
             zone_id: zoneId || null,
+            event_id: eventId || null,
             updated_at: new Date().toISOString()
           })
           .eq('id', userId)
