@@ -7,6 +7,7 @@ import { Loader2, LogOut, AlertTriangle, CheckCircle, XCircle } from "lucide-rea
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,6 +63,7 @@ interface OrderReturn {
 const Station = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, tenantId, loading: authLoading } = useAuthGuard();
   const [loading, setLoading] = useState(true);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
@@ -69,7 +71,9 @@ const Station = () => {
   const [outOfStockItem, setOutOfStockItem] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
-    fetchStationData();
+    if (!authLoading && user && tenantId) {
+      fetchStationData();
+    }
     
     const channel = supabase
       .channel('station-updates')
@@ -100,33 +104,18 @@ const Station = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [stationType]);
+  }, [stationType, authLoading, user, tenantId]);
 
   const fetchStationData = async () => {
+    if (!user || !tenantId) return;
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.tenant_id) {
-        navigate('/setup');
-        return;
-      }
-
       // Get user role to determine station type
       const { data: userRole } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id)
-        .eq('tenant_id', profile.tenant_id)
+        .eq('tenant_id', tenantId)
         .single();
 
       if (!userRole) {
@@ -364,7 +353,7 @@ const Station = () => {
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
