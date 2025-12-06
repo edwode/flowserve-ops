@@ -25,6 +25,7 @@ import { AdminReports } from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminTables from "./pages/admin/Tables";
 import AdminAnalytics from "./pages/admin/Analytics";
+import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
 import KitchenDisplay from "./pages/KitchenDisplay";
 import Documentation from "./pages/Documentation";
 import NotFound from "./pages/NotFound";
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="super" element={<SuperAdminDashboard />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
