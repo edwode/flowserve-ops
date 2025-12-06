@@ -66,6 +66,7 @@ const NewOrder = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [usingCache, setUsingCache] = useState(false);
+  const [waiterZoneId, setWaiterZoneId] = useState<string | null>(null);
   
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [selectedTable, setSelectedTable] = useState("");
@@ -89,6 +90,17 @@ const NewOrder = () => {
     if (!user) return;
     
     try {
+      // Fetch waiter's zone assignment
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('zone_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile?.zone_id) {
+        setWaiterZoneId(profile.zone_id);
+      }
+
       const { data, error } = await supabase
         .from('events')
         .select('id, name, event_date')
@@ -112,13 +124,14 @@ const NewOrder = () => {
     if (!selectedEvent) return;
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("tables")
         .select(`
           id,
           table_number,
           capacity,
           status,
+          zone_id,
           zone:zones (
             name,
             color
@@ -126,6 +139,13 @@ const NewOrder = () => {
         `)
         .eq("event_id", selectedEvent)
         .order("table_number");
+
+      // If waiter has a zone assigned, filter tables by that zone
+      if (waiterZoneId) {
+        query = query.eq("zone_id", waiterZoneId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setTables((data || []) as Table[]);
