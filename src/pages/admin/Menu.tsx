@@ -15,6 +15,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface MenuItem {
   id: string;
@@ -311,18 +319,18 @@ export function AdminMenu() {
         </TabsContent>
       </Tabs>
 
-      {dialogOpen && (
-        <Card className="max-w-xl mt-8 p-6 space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
               {editingItem ? "Edit Menu Item" : "Create Menu Item"}
-            </h3>
-            <p className="text-sm text-muted-foreground">
+            </DialogTitle>
+            <DialogDescription>
               {editingItem
                 ? "Update menu item details"
                 : "Add a new item to your menu"}
-            </p>
-          </div>
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
@@ -412,7 +420,7 @@ export function AdminMenu() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
@@ -428,9 +436,9 @@ export function AdminMenu() {
             >
               {editingItem ? "Update" : "Create"}
             </Button>
-          </div>
-        </Card>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
