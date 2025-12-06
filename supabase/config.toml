@@ -8,6 +8,3 @@ verify_jwt = true
 
 [functions.manage-staff]
 verify_jwt = true
-
-[functions.create-super-admin]
-verify_jwt = false
