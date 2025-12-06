@@ -465,7 +465,7 @@ const OrderDetails = () => {
       </div>
 
       {/* Fixed Bottom Actions */}
-      {order.status === 'ready' && allReady && (
+      {(order.status === 'ready' || (order.status === 'pending' && allReady) || (order.status === 'dispatched' && allReady)) && allReady && (
         <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border shadow-lg p-4">
           <Button
             className="w-full h-12"
