@@ -501,6 +501,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          event_id: string | null
           full_name: string | null
           id: string
           is_active: boolean | null
@@ -512,6 +513,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          event_id?: string | null
           full_name?: string | null
           id: string
           is_active?: boolean | null
@@ -523,6 +525,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          event_id?: string | null
           full_name?: string | null
           id?: string
           is_active?: boolean | null
@@ -532,6 +535,13 @@ export type Database = {
           zone_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_tenant_id_fkey"
             columns: ["tenant_id"]

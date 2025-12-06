@@ -18,13 +18,20 @@ interface Zone {
   color: string;
 }
 
+interface Event {
+  id: string;
+  name: string;
+}
+
 interface StaffMember {
   id: string;
   full_name: string | null;
   phone: string | null;
   is_active: boolean;
   zone_id: string | null;
+  event_id: string | null;
   zone?: Zone | null;
+  event?: Event | null;
   user_roles: Array<{
     role: string;
   }>;
@@ -48,6 +55,7 @@ export function AdminStaff() {
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -66,7 +74,7 @@ export function AdminStaff() {
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
-  const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '', zoneId: '' });
+  const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '', zoneId: '', eventId: '' });
 
   // Password reset dialog state
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -77,6 +85,7 @@ export function AdminStaff() {
   useEffect(() => {
     fetchStaff();
     fetchZones();
+    fetchEvents();
   }, []);
 
   const fetchStaff = async () => {
@@ -101,7 +110,9 @@ export function AdminStaff() {
           phone,
           is_active,
           zone_id,
+          event_id,
           zone:zones (id, name, color),
+          event:events (id, name),
           user_roles!inner (role)
         `)
         .eq('tenant_id', profile.tenant_id)
@@ -143,6 +154,33 @@ export function AdminStaff() {
       setZones(data || []);
     } catch (error: any) {
       console.error("Error fetching zones:", error);
+    }
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.tenant_id) return;
+
+      const { data, error } = await supabase
+        .from('events')
+        .select('id, name')
+        .eq('tenant_id', profile.tenant_id)
+        .eq('is_active', true)
+        .order('event_date', { ascending: false });
+
+      if (error) throw error;
+      setEvents(data || []);
+    } catch (error: any) {
+      console.error("Error fetching events:", error);
     }
   };
 
@@ -247,6 +285,7 @@ export function AdminStaff() {
       fullName: editForm.fullName,
       phone: editForm.phone,
       zoneId: editForm.zoneId === 'none' ? null : editForm.zoneId || null,
+      eventId: editForm.eventId === 'none' ? null : editForm.eventId || null,
     });
 
     if (profileSuccess && editForm.role && editForm.role !== editingMember.user_roles[0]?.role) {
@@ -294,6 +333,7 @@ export function AdminStaff() {
       phone: member.phone || '',
       role: member.user_roles[0]?.role || '',
       zoneId: member.zone_id || 'none',
+      eventId: member.event_id || 'none',
     });
     setEditDialogOpen(true);
   };
@@ -539,6 +579,11 @@ export function AdminStaff() {
                         {member.zone.name}
                       </Badge>
                     )}
+                    {member.event && (
+                      <Badge variant="outline" className="border-primary/50 text-primary">
+                        {member.event.name}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -606,34 +651,59 @@ export function AdminStaff() {
             </div>
 
             {editForm.role === 'waiter' && (
-              <div className="space-y-2">
-                <Label htmlFor="editZone">Assigned Zone</Label>
-                <Select
-                  value={editForm.zoneId}
-                  onValueChange={(value) => setEditForm({ ...editForm, zoneId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="No zone assigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No zone assigned</SelectItem>
-                    {zones.map((zone) => (
-                      <SelectItem key={zone.id} value={zone.id}>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: zone.color }}
-                          />
-                          {zone.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Waiters will only see tables in their assigned zone when creating orders
-                </p>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="editEvent">Assigned Event</Label>
+                  <Select
+                    value={editForm.eventId}
+                    onValueChange={(value) => setEditForm({ ...editForm, eventId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="No event assigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No event assigned (all events)</SelectItem>
+                      {events.map((event) => (
+                        <SelectItem key={event.id} value={event.id}>
+                          {event.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Waiters will only see this event when creating orders
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="editZone">Assigned Zone</Label>
+                  <Select
+                    value={editForm.zoneId}
+                    onValueChange={(value) => setEditForm({ ...editForm, zoneId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="No zone assigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No zone assigned (all tables)</SelectItem>
+                      {zones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: zone.color }}
+                            />
+                            {zone.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Waiters will only see tables in their assigned zone
+                  </p>
+                </div>
+              </>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
