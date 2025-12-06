@@ -35,33 +35,17 @@ export function AdminLayout() {
         return;
       }
 
-      // Check if user is super_admin (any tenant)
-      const { data: superAdminRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'super_admin')
-        .maybeSingle();
-
-      if (superAdminRole) {
-        // Super admin has access
-        setLoading(false);
-        return;
-      }
-
-      // Check if user is tenant_admin for their tenant
       const { data: userRole } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id)
         .eq('tenant_id', profile.tenant_id)
-        .eq('role', 'tenant_admin')
-        .maybeSingle();
+        .single();
 
-      if (!userRole) {
+      if (!userRole || userRole.role !== 'tenant_admin') {
         toast({
           title: "Access denied",
-          description: "Only admins can access this area",
+          description: "Only tenant admins can access this area",
           variant: "destructive",
         });
         navigate('/dashboard');
