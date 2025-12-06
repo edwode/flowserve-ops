@@ -21,8 +21,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Clock, ArrowRightLeft, Plus } from "lucide-react";
+import { Users, Clock, ArrowRightLeft, Plus, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+interface Zone {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+}
 
 interface Table {
   id: string;
@@ -32,6 +39,8 @@ interface Table {
   current_order_id: string | null;
   occupied_at: string | null;
   cleared_at: string | null;
+  zone_id: string | null;
+  zone?: Zone | null;
   order?: {
     order_number: string;
     guest_name: string | null;
@@ -48,13 +57,20 @@ interface Event {
 
 export default function Tables() {
   const [tables, setTables] = useState<Table[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [newTableNumber, setNewTableNumber] = useState("");
   const [newTableCapacity, setNewTableCapacity] = useState("4");
+  const [newTableZone, setNewTableZone] = useState<string>("");
+  const [newZoneName, setNewZoneName] = useState("");
+  const [newZoneDescription, setNewZoneDescription] = useState("");
+  const [newZoneColor, setNewZoneColor] = useState("#6B7280");
   const [reassignOrderId, setReassignOrderId] = useState<string | null>(null);
   const [reassignToTable, setReassignToTable] = useState("");
+  const [addTableOpen, setAddTableOpen] = useState(false);
+  const [addZoneOpen, setAddZoneOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -64,6 +80,7 @@ export default function Tables() {
   useEffect(() => {
     if (selectedEvent) {
       fetchTables();
+      fetchZones();
       subscribeToTables();
     }
     return () => {
@@ -93,6 +110,23 @@ export default function Tables() {
     }
   };
 
+  const fetchZones = async () => {
+    if (!selectedEvent) return;
+
+    const { data, error } = await supabase
+      .from("zones")
+      .select("*")
+      .eq("event_id", selectedEvent)
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching zones:", error);
+      return;
+    }
+
+    setZones(data || []);
+  };
+
   const fetchTables = async () => {
     if (!selectedEvent) return;
 
@@ -102,6 +136,12 @@ export default function Tables() {
       .select(
         `
         *,
+        zone:zones (
+          id,
+          name,
+          description,
+          color
+        ),
         order:orders!current_order_id (
           order_number,
           guest_name,
@@ -180,6 +220,49 @@ export default function Tables() {
     return `${diffMins} min`;
   };
 
+  const addZone = async () => {
+    if (!newZoneName || !selectedEvent) return;
+
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", session.session.user.id)
+      .single();
+
+    if (!profile?.tenant_id) return;
+
+    const { error } = await supabase.from("zones").insert({
+      tenant_id: profile.tenant_id,
+      event_id: selectedEvent,
+      name: newZoneName,
+      description: newZoneDescription || null,
+      color: newZoneColor,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.code === "23505" ? "Zone name already exists for this event" : "Failed to add zone",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Zone added successfully",
+    });
+
+    setNewZoneName("");
+    setNewZoneDescription("");
+    setNewZoneColor("#6B7280");
+    setAddZoneOpen(false);
+    fetchZones();
+  };
+
   const addTable = async () => {
     if (!newTableNumber || !selectedEvent) return;
 
@@ -192,7 +275,7 @@ export default function Tables() {
       .eq("id", session.session.user.id)
       .single();
 
-    if (!profile) return;
+    if (!profile?.tenant_id) return;
 
     const { error } = await supabase.from("tables").insert({
       tenant_id: profile.tenant_id,
@@ -200,6 +283,7 @@ export default function Tables() {
       table_number: newTableNumber,
       capacity: parseInt(newTableCapacity),
       status: "available",
+      zone_id: newTableZone || null,
     });
 
     if (error) {
@@ -218,11 +302,13 @@ export default function Tables() {
 
     setNewTableNumber("");
     setNewTableCapacity("4");
+    setNewTableZone("");
+    setAddTableOpen(false);
     fetchTables();
   };
 
   const updateTableStatus = async (tableId: string, status: string) => {
-    const updates: any = { status };
+    const updates: Record<string, unknown> = { status };
     
     if (status === "available") {
       updates.current_order_id = null;
@@ -254,7 +340,6 @@ export default function Tables() {
   const reassignOrder = async () => {
     if (!reassignOrderId || !reassignToTable) return;
 
-    // Update the order's table number
     const newTable = tables.find((t) => t.id === reassignToTable);
     if (!newTable) return;
 
@@ -272,7 +357,6 @@ export default function Tables() {
       return;
     }
 
-    // Update old table
     const oldTable = tables.find((t) => t.current_order_id === reassignOrderId);
     if (oldTable) {
       await supabase
@@ -285,7 +369,6 @@ export default function Tables() {
         .eq("id", oldTable.id);
     }
 
-    // Update new table
     await supabase
       .from("tables")
       .update({ 
@@ -317,6 +400,16 @@ export default function Tables() {
     .filter((t) => t.status === "occupied")
     .reduce((acc, t) => acc + t.capacity, 0);
 
+  // Group tables by zone
+  const tablesByZone = tables.reduce((acc, table) => {
+    const zoneId = table.zone_id || "unassigned";
+    if (!acc[zoneId]) {
+      acc[zoneId] = [];
+    }
+    acc[zoneId].push(table);
+    return acc;
+  }, {} as Record<string, Table[]>);
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
@@ -339,7 +432,60 @@ export default function Tables() {
             </SelectContent>
           </Select>
 
-          <Dialog>
+          <Dialog open={addZoneOpen} onOpenChange={setAddZoneOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <MapPin className="w-4 h-4 mr-2" />
+                Add Zone
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Zone</DialogTitle>
+                <DialogDescription>
+                  Create a zone to group tables together
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="zone-name">Zone Name</Label>
+                  <Input
+                    id="zone-name"
+                    value={newZoneName}
+                    onChange={(e) => setNewZoneName(e.target.value)}
+                    placeholder="e.g., VIP Section, Outdoor Area"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="zone-description">Description (Optional)</Label>
+                  <Input
+                    id="zone-description"
+                    value={newZoneDescription}
+                    onChange={(e) => setNewZoneDescription(e.target.value)}
+                    placeholder="Brief description"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="zone-color">Color</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="zone-color"
+                      type="color"
+                      value={newZoneColor}
+                      onChange={(e) => setNewZoneColor(e.target.value)}
+                      className="w-16 h-10 p-1 cursor-pointer"
+                    />
+                    <span className="text-sm text-muted-foreground">{newZoneColor}</span>
+                  </div>
+                </div>
+                <Button onClick={addZone} className="w-full">
+                  Add Zone
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={addTableOpen} onOpenChange={setAddTableOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
@@ -373,6 +519,28 @@ export default function Tables() {
                     min="1"
                   />
                 </div>
+                <div>
+                  <Label htmlFor="zone">Zone (Optional)</Label>
+                  <Select value={newTableZone} onValueChange={setNewTableZone}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a zone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No Zone</SelectItem>
+                      {zones.map((zone) => (
+                        <SelectItem key={zone.id} value={zone.id}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: zone.color }}
+                            />
+                            {zone.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button onClick={addTable} className="w-full">
                   Add Table
                 </Button>
@@ -381,6 +549,33 @@ export default function Tables() {
           </Dialog>
         </div>
       </div>
+
+      {/* Zone Legend */}
+      {zones.length > 0 && (
+        <div className="flex flex-wrap gap-3 mb-6">
+          {zones.map((zone) => (
+            <div key={zone.id} className="flex items-center gap-2 px-3 py-1 bg-muted rounded-full">
+              <div 
+                className="w-3 h-3 rounded-full" 
+                style={{ backgroundColor: zone.color }}
+              />
+              <span className="text-sm font-medium">{zone.name}</span>
+              <span className="text-xs text-muted-foreground">
+                ({tablesByZone[zone.id]?.length || 0} tables)
+              </span>
+            </div>
+          ))}
+          {tablesByZone["unassigned"]?.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-full">
+              <div className="w-3 h-3 rounded-full bg-gray-400" />
+              <span className="text-sm font-medium">Unassigned</span>
+              <span className="text-xs text-muted-foreground">
+                ({tablesByZone["unassigned"].length} tables)
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Card>
@@ -420,9 +615,23 @@ export default function Tables() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {tables.map((table) => (
           <Card key={table.id} className="relative">
+            {table.zone && (
+              <div 
+                className="absolute top-0 left-0 right-0 h-1 rounded-t-lg"
+                style={{ backgroundColor: table.zone.color }}
+              />
+            )}
             <CardHeader>
               <div className="flex justify-between items-start">
-                <CardTitle className="text-xl">Table {table.table_number}</CardTitle>
+                <div>
+                  <CardTitle className="text-xl">Table {table.table_number}</CardTitle>
+                  {table.zone && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <MapPin className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">{table.zone.name}</span>
+                    </div>
+                  )}
+                </div>
                 <Badge className={getStatusColor(table.status)}>
                   {getStatusLabel(table.status)}
                 </Badge>
@@ -483,6 +692,7 @@ export default function Tables() {
                                 .map((t) => (
                                   <SelectItem key={t.id} value={t.id}>
                                     Table {t.table_number} (Capacity: {t.capacity})
+                                    {t.zone && ` - ${t.zone.name}`}
                                   </SelectItem>
                                 ))}
                             </SelectContent>
