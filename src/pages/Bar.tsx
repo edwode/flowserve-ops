@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, LogOut, Plus, Minus, DollarSign, X } from "lucide-react";
+import { Loader2, LogOut, Plus, Minus, DollarSign, X, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -38,6 +38,14 @@ interface CartItem extends MenuItem {
   quantity: number;
 }
 
+interface OrderItem {
+  id: string;
+  status: string;
+  station_type: string;
+  menu_item_name: string;
+  quantity: number;
+}
+
 interface Order {
   id: string;
   order_number: string;
@@ -47,6 +55,7 @@ interface Order {
   status: string;
   created_at: string;
   waiter_name?: string | null;
+  items?: OrderItem[];
 }
 
 const Bar = () => {
@@ -151,8 +160,13 @@ const Bar = () => {
         .select(`
           *,
           order_items!inner (
+            id,
             station_type,
-            status
+            status,
+            quantity,
+            menu_items (
+              name
+            )
           ),
           profiles!orders_waiter_id_fkey (
             full_name
@@ -169,6 +183,17 @@ const Bar = () => {
       // Remove duplicates since an order might have multiple bar items
       const uniqueOrders = data?.reduce((acc: Order[], order: any) => {
         if (!acc.find(o => o.id === order.id)) {
+          // Filter only bar/mixologist items
+          const barItems = order.order_items
+            .filter((item: any) => ['bar', 'mixologist'].includes(item.station_type))
+            .map((item: any) => ({
+              id: item.id,
+              status: item.status,
+              station_type: item.station_type,
+              menu_item_name: item.menu_items?.name || 'Unknown',
+              quantity: item.quantity,
+            }));
+          
           acc.push({
             id: order.id,
             order_number: order.order_number,
@@ -178,6 +203,7 @@ const Bar = () => {
             status: order.status,
             created_at: order.created_at,
             waiter_name: order.profiles?.full_name || null,
+            items: barItems,
           });
         }
         return acc;
@@ -342,6 +368,35 @@ const Bar = () => {
       });
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleMarkItemReady = async (e: React.MouseEvent, itemId: string) => {
+    e.stopPropagation(); // Prevent opening payment dialog
+    
+    try {
+      const { error } = await supabase
+        .from('order_items')
+        .update({ 
+          status: 'ready',
+          ready_at: new Date().toISOString()
+        })
+        .eq('id', itemId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Item marked ready",
+        description: "The order item has been marked as ready",
+      });
+
+      fetchOrders();
+    } catch (error: any) {
+      toast({
+        title: "Error updating item",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -512,31 +567,60 @@ const Bar = () => {
                   No pending payments
                 </div>
               ) : (
-                orders.map(order => (
-                  <Card
-                    key={order.id}
-                    className="p-3 cursor-pointer hover:bg-accent/5 transition-colors"
-                    onClick={() => setPaymentDialog(order)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <div className="font-semibold">{order.order_number}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {order.guest_name || (order.table_number === 'BAR' ? 'Walk-in' : order.waiter_name || 'Unknown')}
+                orders.map(order => {
+                  const hasPendingItems = order.items?.some(item => item.status === 'pending' || item.status === 'dispatched');
+                  
+                  return (
+                    <Card
+                      key={order.id}
+                      className="p-3 cursor-pointer hover:bg-accent/5 transition-colors"
+                      onClick={() => setPaymentDialog(order)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <div className="font-semibold">{order.order_number}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {order.guest_name || (order.table_number === 'BAR' ? 'Walk-in' : order.waiter_name || 'Unknown')}
+                          </div>
                         </div>
+                        <Badge variant="secondary">{order.status}</Badge>
                       </div>
-                      <Badge variant="secondary">{order.status}</Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(order.created_at).toLocaleTimeString()}
-                      </span>
-                      <span className="text-lg font-bold">
-                        ${order.total_amount.toFixed(2)}
-                      </span>
-                    </div>
-                  </Card>
-                ))
+                      
+                      {/* Show order items with mark ready buttons for pending items */}
+                      {hasPendingItems && (
+                        <div className="space-y-2 mb-3 pt-2 border-t border-border">
+                          {order.items?.filter(item => item.status === 'pending' || item.status === 'dispatched').map(item => (
+                            <div key={item.id} className="flex items-center justify-between gap-2">
+                              <div className="flex-1 text-sm">
+                                <span className="font-medium">{item.quantity}x</span>{' '}
+                                <span>{item.menu_item_name}</span>
+                                <Badge variant="outline" className="ml-2 text-xs">{item.status}</Badge>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7"
+                                onClick={(e) => handleMarkItemReady(e, item.id)}
+                              >
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Ready
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(order.created_at).toLocaleTimeString()}
+                        </span>
+                        <span className="text-lg font-bold">
+                          ${order.total_amount.toFixed(2)}
+                        </span>
+                      </div>
+                    </Card>
+                  );
+                })
               )}
             </div>
           </Card>
