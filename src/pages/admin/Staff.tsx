@@ -111,15 +111,22 @@ export function AdminStaff() {
           is_active,
           zone_id,
           event_id,
-          zone:zones (id, name, color),
-          event:events (id, name),
+          zones (id, name, color),
+          events (id, name),
           user_roles!inner (role)
         `)
         .eq('tenant_id', profile.tenant_id)
         .eq('user_roles.tenant_id', profile.tenant_id);
 
       if (error) throw error;
-      setStaff((data || []) as StaffMember[]);
+      
+      // Map the response to expected format
+      const mappedData = (data || []).map(item => ({
+        ...item,
+        zone: item.zones,
+        event: item.events,
+      }));
+      setStaff(mappedData as StaffMember[]);
     } catch (error: any) {
       toast({
         title: "Error loading staff",
