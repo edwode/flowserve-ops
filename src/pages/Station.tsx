@@ -328,7 +328,7 @@ const Station = () => {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     navigate('/auth');
   };
 
