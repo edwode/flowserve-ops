@@ -573,8 +573,8 @@ const Bar = () => {
                   return (
                     <Card
                       key={order.id}
-                      className="p-3 cursor-pointer hover:bg-accent/5 transition-colors"
-                      onClick={() => setPaymentDialog(order)}
+                      className={`p-3 transition-colors ${hasPendingItems ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:bg-accent/5'}`}
+                      onClick={() => !hasPendingItems && setPaymentDialog(order)}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div>
