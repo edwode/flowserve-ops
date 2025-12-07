@@ -78,6 +78,11 @@ const Bar = () => {
     if (!authLoading && user) {
       fetchData();
     }
+  }, [authLoading, user]);
+
+  // Separate effect for realtime subscription that depends on activeEvent
+  useEffect(() => {
+    if (!activeEvent) return;
     
     const channel = supabase
       .channel('bar-updates')
@@ -89,7 +94,18 @@ const Bar = () => {
           table: 'orders'
         },
         () => {
-          fetchOrders();
+          fetchOrders(activeEvent);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items'
+        },
+        () => {
+          fetchOrders(activeEvent);
         }
       )
       .subscribe();
@@ -97,7 +113,7 @@ const Bar = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authLoading, user]);
+  }, [activeEvent]);
 
   const fetchData = async () => {
     if (!user) return;
