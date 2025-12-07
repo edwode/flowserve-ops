@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 
 interface OrderItem {
   id: string;
@@ -58,6 +59,7 @@ const OrderDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -358,7 +360,7 @@ const OrderDetails = () => {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Total Amount</span>
-              <span className="text-2xl font-bold">${order.total_amount.toFixed(2)}</span>
+              <span className="text-2xl font-bold">{formatPrice(order.total_amount)}</span>
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -398,7 +400,7 @@ const OrderDetails = () => {
                   <span className="text-muted-foreground capitalize">
                     {payment.payment_method}
                   </span>
-                  <span className="font-semibold">${payment.amount.toFixed(2)}</span>
+                  <span className="font-semibold">{formatPrice(payment.amount)}</span>
                 </div>
               ))}
             </div>
@@ -421,7 +423,7 @@ const OrderDetails = () => {
                       <div className="flex-1">
                         <div className="font-medium">{item.menu_items.name}</div>
                         <div className="text-sm text-muted-foreground">
-                          Qty: {item.quantity} • ${item.price.toFixed(2)} each
+                          Qty: {item.quantity} • {formatPrice(item.price)} each
                         </div>
                         {item.notes && (
                           <div className="text-sm text-muted-foreground mt-1">

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 import {
   Dialog,
   DialogContent,
@@ -77,6 +78,7 @@ const Cashier = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, tenantId, loading: authLoading } = useAuthGuard();
+  const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
@@ -236,7 +238,7 @@ const Cashier = () => {
         if (Math.abs(total - selectedOrder.total_amount) > 0.01) {
           toast({
             title: "Invalid split amounts",
-            description: `Total must equal $${selectedOrder.total_amount.toFixed(2)}`,
+            description: `Total must equal ${formatPrice(selectedOrder.total_amount)}`,
             variant: "destructive",
           });
           setProcessing(false);
@@ -322,7 +324,7 @@ const Cashier = () => {
 
       toast({
         title: "Refund approved",
-        description: `$${refundAmount.toFixed(2)} will be refunded`,
+        description: `${formatPrice(refundAmount)} will be refunded`,
       });
 
       fetchReturns();
@@ -433,7 +435,7 @@ const Cashier = () => {
                     <div className="flex items-center justify-between border-t border-border pt-3">
                       <div>
                         <div className="text-2xl font-bold">
-                          ${order.total_amount.toFixed(2)}
+                          {formatPrice(order.total_amount)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {order.served_at 
@@ -505,7 +507,7 @@ const Cashier = () => {
                       </div>
                       <div className="text-sm text-muted-foreground">
                         Qty: {returnItem.order_items.quantity} • 
-                        ${returnItem.order_items.price.toFixed(2)} each
+                        {formatPrice(returnItem.order_items.price)} each
                       </div>
                       <div className="text-sm text-destructive mt-2">
                         Reason: {returnItem.reason}
@@ -514,10 +516,9 @@ const Cashier = () => {
 
                     <div className="flex items-center justify-between border-t border-border pt-3">
                       <div className="text-lg font-bold">
-                        Refund: $
-                        {(returnItem.refund_amount || 
+                        Refund: {formatPrice(returnItem.refund_amount || 
                           returnItem.order_items.price * returnItem.order_items.quantity
-                        ).toFixed(2)}
+                        )}
                       </div>
                       {!returnItem.refund_amount && (
                         <Button
@@ -552,7 +553,7 @@ const Cashier = () => {
           <div className="space-y-4">
             <div className="text-center py-4 border-y border-border">
               <div className="text-3xl font-bold">
-                ${selectedOrder?.total_amount.toFixed(2)}
+                {selectedOrder ? formatPrice(selectedOrder.total_amount) : ''}
               </div>
               <div className="text-sm text-muted-foreground">Total Amount</div>
             </div>
@@ -615,8 +616,8 @@ const Cashier = () => {
                       Math.abs(getSplitTotal() - (selectedOrder?.total_amount || 0)) < 0.01
                         ? 'text-success'
                         : 'text-destructive'
-                    }`}>
-                      ${getSplitTotal().toFixed(2)}
+                     }`}>
+                      {formatPrice(getSplitTotal())}
                     </span>
                   </div>
                 </div>
@@ -691,7 +692,7 @@ const Cashier = () => {
                     <span>{item.menu_item?.name}</span>
                   </div>
                   <span className="font-medium">
-                    ${(item.price * item.quantity).toFixed(2)}
+                    {formatPrice(item.price * item.quantity)}
                   </span>
                 </div>
               ))}
@@ -700,7 +701,7 @@ const Cashier = () => {
             <div className="flex items-center justify-between pt-3 border-t border-border">
               <span className="text-lg font-semibold">Total</span>
               <span className="text-xl font-bold">
-                ${viewingOrder?.total_amount.toFixed(2)}
+                {viewingOrder ? formatPrice(viewingOrder.total_amount) : ''}
               </span>
             </div>
           </div>

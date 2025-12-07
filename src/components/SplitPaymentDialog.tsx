@@ -31,6 +31,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 
 interface OrderItem {
   id: string;
@@ -85,6 +86,7 @@ export function SplitPaymentDialog({
   onPaymentComplete,
 }: SplitPaymentDialogProps) {
   const { toast } = useToast();
+  const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(false);
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [splitType, setSplitType] = useState<"full" | "by_guest" | "by_item" | "custom">("full");
@@ -406,7 +408,7 @@ export function SplitPaymentDialog({
 
       toast({
         title: "Payment recorded",
-        description: `Payment of $${split.amount.toFixed(2)} recorded`,
+        description: `Payment of ${formatPrice(split.amount)} recorded`,
       });
 
       await fetchPaymentSummary();
@@ -456,19 +458,19 @@ export function SplitPaymentDialog({
           <CardContent className="pt-6 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Total Amount:</span>
-              <span className="font-semibold">${paymentSummary.total_amount.toFixed(2)}</span>
+              <span className="font-semibold">{formatPrice(paymentSummary.total_amount)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Already Paid:</span>
               <span className="font-semibold text-green-600">
-                ${paymentSummary.total_paid.toFixed(2)}
+                {formatPrice(paymentSummary.total_paid)}
               </span>
             </div>
             <Separator />
             <div className="flex justify-between">
               <span className="font-bold">Remaining Balance:</span>
               <span className="font-bold text-lg">
-                ${paymentSummary.remaining_balance.toFixed(2)}
+                {formatPrice(paymentSummary.remaining_balance)}
               </span>
             </div>
           </CardContent>
@@ -514,7 +516,7 @@ export function SplitPaymentDialog({
               className="w-full"
               size="lg"
             >
-              Process Full Payment (${paymentSummary.remaining_balance.toFixed(2)})
+              Process Full Payment ({formatPrice(paymentSummary.remaining_balance)})
             </Button>
           </TabsContent>
 
@@ -639,7 +641,7 @@ export function SplitPaymentDialog({
                         <div>
                           <p className="font-medium">{item.menu_item.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            ${item.price.toFixed(2)} × {item.quantity}
+                            {formatPrice(item.price)} × {item.quantity}
                           </p>
                         </div>
                       </div>
@@ -663,7 +665,7 @@ export function SplitPaymentDialog({
                         />
                       )}
                       <span className="font-semibold">
-                        ${(item.price * item.quantity).toFixed(2)}
+                        {formatPrice(item.price * item.quantity)}
                       </span>
                     </div>
                   </CardContent>
@@ -761,7 +763,7 @@ export function SplitPaymentDialog({
               <CardContent className="pt-4">
                 <div className="flex justify-between">
                   <span>Custom Split Total:</span>
-                  <span className="font-bold">${customSplitTotal.toFixed(2)}</span>
+                  <span className="font-bold">{formatPrice(customSplitTotal)}</span>
                 </div>
                 {customSplitTotal > paymentSummary.remaining_balance && (
                   <p className="text-sm text-red-600 mt-2">
