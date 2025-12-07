@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, DollarSign, AlertTriangle, Split } from "lucide-react";
+import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -340,6 +340,170 @@ const Cashier = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut({ scope: 'local' });
     navigate('/auth');
+  };
+
+  const handlePrintReceipt = (order: Order | null) => {
+    if (!order) return;
+
+    const receiptContent = `
+      <html>
+        <head>
+          <title>Receipt - ${order.order_number}</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              font-family: 'Courier New', monospace;
+              font-size: 12px;
+              width: 80mm;
+              padding: 4mm;
+              line-height: 1.4;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 8px;
+              padding-bottom: 8px;
+              border-bottom: 1px dashed #000;
+            }
+            .header h1 {
+              font-size: 16px;
+              font-weight: bold;
+              margin-bottom: 4px;
+            }
+            .header p {
+              font-size: 11px;
+            }
+            .info {
+              margin-bottom: 8px;
+              padding-bottom: 8px;
+              border-bottom: 1px dashed #000;
+            }
+            .info-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 11px;
+            }
+            .items {
+              margin-bottom: 8px;
+              padding-bottom: 8px;
+              border-bottom: 1px dashed #000;
+            }
+            .item {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 4px;
+            }
+            .item-name {
+              flex: 1;
+              word-break: break-word;
+            }
+            .item-qty {
+              width: 30px;
+              text-align: center;
+            }
+            .item-price {
+              width: 50px;
+              text-align: right;
+            }
+            .total {
+              display: flex;
+              justify-content: space-between;
+              font-size: 14px;
+              font-weight: bold;
+              margin: 8px 0;
+              padding: 8px 0;
+              border-top: 2px solid #000;
+              border-bottom: 2px solid #000;
+            }
+            .footer {
+              text-align: center;
+              font-size: 10px;
+              margin-top: 12px;
+            }
+            @media print {
+              body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>ORDER RECEIPT</h1>
+            <p>${order.order_number}</p>
+          </div>
+          
+          <div class="info">
+            <div class="info-row">
+              <span>Table:</span>
+              <span>${order.table_number || 'N/A'}</span>
+            </div>
+            ${order.guest_name ? `
+            <div class="info-row">
+              <span>Guest:</span>
+              <span>${order.guest_name}</span>
+            </div>
+            ` : ''}
+            <div class="info-row">
+              <span>Waiter:</span>
+              <span>${order.profiles?.full_name || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span>Date:</span>
+              <span>${new Date().toLocaleDateString()}</span>
+            </div>
+            <div class="info-row">
+              <span>Time:</span>
+              <span>${new Date().toLocaleTimeString()}</span>
+            </div>
+          </div>
+          
+          <div class="items">
+            <div class="item" style="font-weight: bold; margin-bottom: 8px;">
+              <span class="item-name">Item</span>
+              <span class="item-qty">Qty</span>
+              <span class="item-price">Price</span>
+            </div>
+            ${order.order_items?.map(item => `
+              <div class="item">
+                <span class="item-name">${item.menu_item?.name || 'Item'}</span>
+                <span class="item-qty">${item.quantity}</span>
+                <span class="item-price">${formatPrice(item.price * item.quantity)}</span>
+              </div>
+            `).join('') || ''}
+          </div>
+          
+          <div class="total">
+            <span>TOTAL</span>
+            <span>${formatPrice(order.total_amount)}</span>
+          </div>
+          
+          <div class="footer">
+            <p>Thank you for your order!</p>
+            <p style="margin-top: 4px;">================================</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=300,height=600');
+    if (printWindow) {
+      printWindow.document.write(receiptContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 250);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -707,6 +871,15 @@ const Cashier = () => {
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-4 right-12"
+              onClick={() => handlePrintReceipt(viewingOrder)}
+              title="Print Receipt"
+            >
+              <Printer className="h-4 w-4" />
+            </Button>
             <Button
               variant="outline"
               className="w-full sm:w-auto"
