@@ -119,19 +119,61 @@ const Bar = () => {
     if (!user) return;
     
     try {
+      // First check if user has an assigned event
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('event_id')
+        .eq('id', user.id)
+        .single();
 
-      // Get active event
-      const { data: events } = await supabase
-        .from('events')
-        .select('id')
-        .eq('is_active', true)
-        .order('event_date', { ascending: false })
-        .limit(1);
+      let eventId: string | null = null;
 
-      if (events && events.length > 0) {
-        setActiveEvent(events[0].id);
-        await fetchMenuItems(events[0].id);
-        await fetchOrders(events[0].id);
+      if (profile?.event_id) {
+        // Use user's assigned event
+        eventId = profile.event_id;
+      } else {
+        // Fall back to finding an active event with bar menu items
+        const { data: eventsWithBarItems } = await supabase
+          .from('menu_items')
+          .select('event_id')
+          .in('station_type', ['bar', 'mixologist'])
+          .eq('is_available', true)
+          .not('event_id', 'is', null)
+          .limit(1);
+
+        if (eventsWithBarItems && eventsWithBarItems.length > 0) {
+          // Verify the event is active
+          const { data: activeEvent } = await supabase
+            .from('events')
+            .select('id')
+            .eq('id', eventsWithBarItems[0].event_id)
+            .eq('is_active', true)
+            .single();
+          
+          if (activeEvent) {
+            eventId = activeEvent.id;
+          }
+        }
+
+        // Final fallback: get any active event
+        if (!eventId) {
+          const { data: events } = await supabase
+            .from('events')
+            .select('id')
+            .eq('is_active', true)
+            .order('event_date', { ascending: false })
+            .limit(1);
+
+          if (events && events.length > 0) {
+            eventId = events[0].id;
+          }
+        }
+      }
+
+      if (eventId) {
+        setActiveEvent(eventId);
+        await fetchMenuItems(eventId);
+        await fetchOrders(eventId);
       }
     } catch (error: any) {
       toast({
