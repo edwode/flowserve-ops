@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -43,6 +44,7 @@ interface Event {
 
 export function AdminMenu() {
   const { toast } = useToast();
+  const { formatPrice } = useTenantCurrency();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("all");
@@ -277,7 +279,7 @@ export function AdminMenu() {
                         <div>
                           <div className="font-medium">{item.name}</div>
                           <div className="text-sm text-muted-foreground">
-                            ${item.price.toFixed(2)}
+                            {formatPrice(item.price)}
                           </div>
                         </div>
                         <Badge variant={item.is_available ? "default" : "secondary"}>
