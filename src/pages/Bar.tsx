@@ -456,36 +456,42 @@ const Bar = () => {
           {/* Menu Items */}
           <Card className="p-4">
             <h2 className="font-semibold mb-3">Menu</h2>
-            <Tabs defaultValue={Object.keys(groupedMenuItems)[0]} className="w-full">
-              <TabsList className="w-full">
-                {Object.keys(groupedMenuItems).map(category => (
-                  <TabsTrigger key={category} value={category} className="flex-1">
-                    {category}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {Object.entries(groupedMenuItems).map(([category, items]) => (
-                <TabsContent key={category} value={category} className="space-y-2 mt-4">
-                  {items.map(item => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-2 border rounded-md hover:bg-accent/5 cursor-pointer"
-                      onClick={() => addToCart(item)}
-                    >
-                    <div>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatPrice(item.price)}
-                      </div>
-                      </div>
-                      <Button size="sm">
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
+            {Object.keys(groupedMenuItems).length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No bar menu items available for this event
+              </div>
+            ) : (
+              <Tabs defaultValue={Object.keys(groupedMenuItems)[0]} className="w-full">
+                <TabsList className="w-full flex-wrap h-auto gap-1">
+                  {Object.keys(groupedMenuItems).map(category => (
+                    <TabsTrigger key={category} value={category} className="flex-1 min-w-fit">
+                      {category}
+                    </TabsTrigger>
                   ))}
-                </TabsContent>
-              ))}
-            </Tabs>
+                </TabsList>
+                {Object.entries(groupedMenuItems).map(([category, items]) => (
+                  <TabsContent key={category} value={category} className="space-y-2 mt-4">
+                    {items.map(item => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-2 border rounded-md hover:bg-accent/5 cursor-pointer"
+                        onClick={() => addToCart(item)}
+                      >
+                        <div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatPrice(item.price)}
+                          </div>
+                        </div>
+                        <Button size="sm">
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
           </Card>
 
           {/* Cart */}
