@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 import {
   Dialog,
   DialogContent,
@@ -62,6 +63,7 @@ const Bar = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, tenantId, loading: authLoading } = useAuthGuard();
+  const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(true);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -470,11 +472,11 @@ const Bar = () => {
                       className="flex items-center justify-between p-2 border rounded-md hover:bg-accent/5 cursor-pointer"
                       onClick={() => addToCart(item)}
                     >
-                      <div>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          ${item.price.toFixed(2)}
-                        </div>
+                    <div>
+                      <div className="font-medium">{item.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatPrice(item.price)}
+                      </div>
                       </div>
                       <Button size="sm">
                         <Plus className="h-4 w-4" />
@@ -509,7 +511,7 @@ const Bar = () => {
                     <div className="flex-1">
                       <div className="font-medium">{item.name}</div>
                       <div className="text-sm text-muted-foreground">
-                        ${item.price.toFixed(2)} × {item.quantity}
+                        {formatPrice(item.price)} × {item.quantity}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -534,7 +536,7 @@ const Bar = () => {
                 <div className="border-t border-border pt-3 mt-3">
                   <div className="flex justify-between items-center text-lg font-bold">
                     <span>Total:</span>
-                    <span>${getTotalAmount().toFixed(2)}</span>
+                    <span>{formatPrice(getTotalAmount())}</span>
                   </div>
                 </div>
 
@@ -611,11 +613,11 @@ const Bar = () => {
                       )}
                       
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                           {new Date(order.created_at).toLocaleTimeString()}
                         </span>
                         <span className="text-lg font-bold">
-                          ${order.total_amount.toFixed(2)}
+                          {formatPrice(order.total_amount)}
                         </span>
                       </div>
                     </Card>
@@ -640,7 +642,7 @@ const Bar = () => {
                 {paymentDialog?.order_number}
               </div>
               <div className="text-3xl font-bold">
-                ${paymentDialog?.total_amount.toFixed(2)}
+                {paymentDialog ? formatPrice(paymentDialog.total_amount) : ''}
               </div>
             </div>
 

@@ -22,6 +22,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OfflineStorage } from "@/lib/offlineStorage";
 import { offlineQueue } from "@/lib/offlineQueue";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 
 interface Event {
   id: string;
@@ -58,6 +59,7 @@ const NewOrder = () => {
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
   const { user, tenantId, loading: authLoading } = useAuthGuard();
+  const { formatPrice } = useTenantCurrency();
   
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -454,7 +456,7 @@ const NewOrder = () => {
                         <div className="flex-1">
                           <div className="font-medium">{item.name}</div>
                           <div className="text-sm text-muted-foreground">
-                            ${item.price.toFixed(2)}
+                            {formatPrice(item.price)}
                           </div>
                         </div>
                         {quantity === 0 ? (
@@ -501,7 +503,7 @@ const NewOrder = () => {
               <span className="font-semibold">{cart.reduce((sum, i) => sum + i.quantity, 0)} items</span>
             </div>
             <div className="text-xl font-bold">
-              ${getTotalAmount().toFixed(2)}
+              {formatPrice(getTotalAmount())}
             </div>
           </div>
           <Button

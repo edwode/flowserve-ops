@@ -12,6 +12,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { OfflineStorage } from "@/lib/offlineStorage";
 import { offlineQueue } from "@/lib/offlineQueue";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 
 interface Order {
   id: string;
@@ -28,6 +29,7 @@ const Waiter = () => {
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
   const { user, loading: authLoading } = useAuthGuard();
+  const { formatPrice } = useTenantCurrency();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingCache, setUsingCache] = useState(false);
@@ -256,7 +258,7 @@ const Waiter = () => {
                     {new Date(order.created_at).toLocaleTimeString()}
                   </span>
                   <span className="font-semibold">
-                    ${order.total_amount.toFixed(2)}
+                    {formatPrice(order.total_amount)}
                   </span>
                 </div>
               </Card>

@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,6 +65,7 @@ const Station = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, tenantId, loading: authLoading } = useAuthGuard();
+  const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(true);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
@@ -459,7 +461,7 @@ const Station = () => {
                   <div className="border-t border-border pt-3">
                     <div className="font-medium">{item.menu_items.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      Quantity: {item.quantity} • ${item.menu_items.price.toFixed(2)} each
+                      Quantity: {item.quantity} • {formatPrice(item.menu_items.price)} each
                     </div>
                     {item.notes && (
                       <div className="text-sm text-muted-foreground mt-1">
