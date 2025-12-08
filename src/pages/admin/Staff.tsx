@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Loader2, Eye, EyeOff, MoreVertical, Pencil, Key, UserX, Trash2, UserCheck } from "lucide-react";
+import { UserPlus, Loader2, Eye, EyeOff, MoreVertical, Pencil, Key, UserX, Trash2, UserCheck, MapPin } from "lucide-react";
 
 interface Zone {
   id: string;
@@ -21,6 +22,14 @@ interface Zone {
 interface Event {
   id: string;
   name: string;
+}
+
+interface ZoneRoleAssignment {
+  id: string;
+  user_id: string;
+  zone_id: string;
+  role: string;
+  zone?: Zone;
 }
 
 interface StaffMember {
@@ -35,6 +44,7 @@ interface StaffMember {
   user_roles: Array<{
     role: string;
   }>;
+  zone_assignments?: ZoneRoleAssignment[];
 }
 
 const ROLES = [
@@ -51,6 +61,9 @@ const ROLES = [
 
 const ASSIGNABLE_ROLES = ROLES.filter(r => r.value !== 'tenant_admin');
 
+// Station roles that support multi-zone assignment
+const STATION_ROLES = ['cashier', 'bar_staff', 'mixologist', 'drink_dispenser', 'meal_dispenser'];
+
 export function AdminStaff() {
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -61,6 +74,7 @@ export function AdminStaff() {
   const [creating, setCreating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState<string | null>(null);
   
   // Create form state
   const [formData, setFormData] = useState({
@@ -75,6 +89,7 @@ export function AdminStaff() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
   const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '', zoneId: '', eventId: '' });
+  const [selectedZones, setSelectedZones] = useState<string[]>([]);
 
   // Password reset dialog state
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -101,6 +116,7 @@ export function AdminStaff() {
         .single();
 
       if (!profile?.tenant_id) throw new Error("No tenant found");
+      setTenantId(profile.tenant_id);
 
       const { data, error } = await supabase
         .from('profiles')
@@ -134,12 +150,39 @@ export function AdminStaff() {
           return acc;
         }, {} as Record<string, Event>);
       }
+
+      // Fetch zone role assignments for all staff
+      const userIds = (data || []).map(d => d.id);
+      let zoneAssignmentsMap: Record<string, ZoneRoleAssignment[]> = {};
+      
+      if (userIds.length > 0) {
+        const { data: zoneAssignments } = await supabase
+          .from('zone_role_assignments')
+          .select(`
+            id,
+            user_id,
+            zone_id,
+            role,
+            zones (id, name, color)
+          `)
+          .in('user_id', userIds);
+        
+        zoneAssignmentsMap = (zoneAssignments || []).reduce((acc, za) => {
+          if (!acc[za.user_id]) acc[za.user_id] = [];
+          acc[za.user_id].push({
+            ...za,
+            zone: za.zones as Zone
+          });
+          return acc;
+        }, {} as Record<string, ZoneRoleAssignment[]>);
+      }
       
       // Map the response to expected format
       const mappedData = (data || []).map(item => ({
         ...item,
         zone: item.zones,
         event: item.event_id ? eventsMap[item.event_id] || null : null,
+        zone_assignments: zoneAssignmentsMap[item.id] || [],
       }));
       setStaff(mappedData as StaffMember[]);
     } catch (error: any) {
@@ -301,23 +344,91 @@ export function AdminStaff() {
   };
 
   const handleEditSubmit = async () => {
-    if (!editingMember) return;
+    if (!editingMember || !tenantId) return;
 
-    const profileSuccess = await handleManageStaff('update_profile', editingMember.id, {
-      fullName: editForm.fullName,
-      phone: editForm.phone,
-      zoneId: editForm.zoneId === 'none' ? null : editForm.zoneId || null,
-      eventId: editForm.eventId === 'none' ? null : editForm.eventId || null,
-    });
+    setActionLoading(editingMember.id);
 
-    if (profileSuccess && editForm.role && editForm.role !== editingMember.user_roles[0]?.role) {
-      await handleManageStaff('update_role', editingMember.id, { role: editForm.role });
+    try {
+      const profileSuccess = await handleManageStaff('update_profile', editingMember.id, {
+        fullName: editForm.fullName,
+        phone: editForm.phone,
+        zoneId: editForm.zoneId === 'none' ? null : editForm.zoneId || null,
+        eventId: editForm.eventId === 'none' ? null : editForm.eventId || null,
+      });
+
+      if (profileSuccess && editForm.role && editForm.role !== editingMember.user_roles[0]?.role) {
+        await handleManageStaff('update_role', editingMember.id, { role: editForm.role });
+      }
+
+      // Handle zone assignments for station roles
+      if (STATION_ROLES.includes(editForm.role)) {
+        // Get current zone assignments
+        const currentZoneIds = (editingMember.zone_assignments || []).map(za => za.zone_id);
+        
+        // Zones to add
+        const zonesToAdd = selectedZones.filter(zId => !currentZoneIds.includes(zId));
+        // Zones to remove
+        const zonesToRemove = currentZoneIds.filter(zId => !selectedZones.includes(zId));
+
+        // Remove old assignments
+        if (zonesToRemove.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('zone_role_assignments')
+            .delete()
+            .eq('user_id', editingMember.id)
+            .in('zone_id', zonesToRemove);
+          
+          if (deleteError) throw deleteError;
+        }
+
+        // Add new assignments
+        for (const zoneId of zonesToAdd) {
+          const { error: insertError } = await supabase
+            .from('zone_role_assignments')
+            .insert({
+              user_id: editingMember.id,
+              zone_id: zoneId,
+              tenant_id: tenantId,
+              role: editForm.role as any,
+            });
+          
+          if (insertError) {
+            // Check if it's a unique constraint violation (another user already has this role in this zone)
+            if (insertError.code === '23505') {
+              const zone = zones.find(z => z.id === zoneId);
+              toast({
+                title: "Zone assignment conflict",
+                description: `Another ${editForm.role.replace(/_/g, ' ')} is already assigned to ${zone?.name || 'this zone'}`,
+                variant: "destructive",
+              });
+            } else {
+              throw insertError;
+            }
+          }
+        }
+      } else {
+        // If not a station role, remove any existing zone assignments
+        const { error: deleteError } = await supabase
+          .from('zone_role_assignments')
+          .delete()
+          .eq('user_id', editingMember.id);
+        
+        if (deleteError) console.error("Error removing zone assignments:", deleteError);
+      }
+
+      toast({ title: "Staff updated successfully" });
+      setEditDialogOpen(false);
+      setEditingMember(null);
+      fetchStaff();
+    } catch (error: any) {
+      toast({
+        title: "Error updating staff",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
     }
-
-    toast({ title: "Staff updated successfully" });
-    setEditDialogOpen(false);
-    setEditingMember(null);
-    fetchStaff();
   };
 
   const handlePasswordReset = async () => {
@@ -350,13 +461,16 @@ export function AdminStaff() {
 
   const openEditDialog = (member: StaffMember) => {
     setEditingMember(member);
+    const role = member.user_roles[0]?.role || '';
     setEditForm({
       fullName: member.full_name || '',
       phone: member.phone || '',
-      role: member.user_roles[0]?.role || '',
+      role: role,
       zoneId: member.zone_id || 'none',
       eventId: member.event_id || 'none',
     });
+    // Set selected zones from existing zone assignments
+    setSelectedZones((member.zone_assignments || []).map(za => za.zone_id));
     setEditDialogOpen(true);
   };
 
@@ -379,6 +493,16 @@ export function AdminStaff() {
       'read_only_partner': 'bg-gray-500/20 text-gray-700 dark:text-gray-300',
     };
     return colors[role] || 'bg-secondary';
+  };
+
+  const isStationRole = (role: string) => STATION_ROLES.includes(role);
+
+  const handleZoneToggle = (zoneId: string) => {
+    setSelectedZones(prev => 
+      prev.includes(zoneId) 
+        ? prev.filter(id => id !== zoneId)
+        : [...prev, zoneId]
+    );
   };
 
   return (
@@ -593,7 +717,9 @@ export function AdminStaff() {
                         {ur.role.replace(/_/g, ' ')}
                       </Badge>
                     ))}
-                    {member.zone && (
+                    
+                    {/* Show single zone for waiters */}
+                    {member.zone && !isStationRole(member.user_roles[0]?.role) && (
                       <Badge 
                         variant="outline"
                         style={{ borderColor: member.zone.color, color: member.zone.color }}
@@ -601,6 +727,24 @@ export function AdminStaff() {
                         {member.zone.name}
                       </Badge>
                     )}
+                    
+                    {/* Show multiple zones for station roles */}
+                    {isStationRole(member.user_roles[0]?.role) && member.zone_assignments && member.zone_assignments.length > 0 && (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />
+                        {member.zone_assignments.map((za) => (
+                          <Badge 
+                            key={za.id}
+                            variant="outline"
+                            className="text-xs"
+                            style={{ borderColor: za.zone?.color, color: za.zone?.color }}
+                          >
+                            {za.zone?.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    
                     {member.event && (
                       <Badge variant="outline" className="border-primary/50 text-primary">
                         {member.event.name}
@@ -625,7 +769,7 @@ export function AdminStaff() {
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Staff Member</DialogTitle>
             <DialogDescription>
@@ -657,7 +801,13 @@ export function AdminStaff() {
               <Label htmlFor="editRole">Role</Label>
               <Select
                 value={editForm.role}
-                onValueChange={(value) => setEditForm({ ...editForm, role: value })}
+                onValueChange={(value) => {
+                  setEditForm({ ...editForm, role: value });
+                  // Clear zone selections when switching roles
+                  if (!STATION_ROLES.includes(value)) {
+                    setSelectedZones([]);
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -672,6 +822,7 @@ export function AdminStaff() {
               </Select>
             </div>
 
+            {/* Waiter-specific: Single zone and event assignment */}
             {editForm.role === 'waiter' && (
               <>
                 <div className="space-y-2">
@@ -726,6 +877,50 @@ export function AdminStaff() {
                   </p>
                 </div>
               </>
+            )}
+
+            {/* Station roles: Multi-zone assignment */}
+            {isStationRole(editForm.role) && (
+              <div className="space-y-2">
+                <Label>Assigned Zones</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select zones where this {editForm.role.replace(/_/g, ' ')} will operate. Only one {editForm.role.replace(/_/g, ' ')} can be assigned per zone.
+                </p>
+                
+                {zones.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                    {zones.map((zone) => (
+                      <div key={zone.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`zone-${zone.id}`}
+                          checked={selectedZones.includes(zone.id)}
+                          onCheckedChange={() => handleZoneToggle(zone.id)}
+                        />
+                        <label 
+                          htmlFor={`zone-${zone.id}`}
+                          className="flex items-center gap-2 text-sm cursor-pointer flex-1"
+                        >
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: zone.color }}
+                          />
+                          {zone.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    No zones available. Create zones in the Tables section first.
+                  </p>
+                )}
+                
+                {selectedZones.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedZones.length} zone{selectedZones.length > 1 ? 's' : ''} selected
+                  </p>
+                )}
+              </div>
             )}
 
             <div className="flex justify-end gap-2 pt-4">
