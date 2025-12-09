@@ -11,7 +11,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, Loader2, Eye, EyeOff, MoreVertical, Pencil, Key, UserX, Trash2, UserCheck, MapPin } from "lucide-react";
+import { UserPlus, Loader2, Eye, EyeOff, MoreVertical, Pencil, Key, UserX, Trash2, UserCheck, MapPin, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Zone {
   id: string;
@@ -91,6 +92,7 @@ export function AdminStaff() {
   const [editingMember, setEditingMember] = useState<StaffMember | null>(null);
   const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '', zoneId: '', eventId: '' });
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
+  const [allZoneAssignments, setAllZoneAssignments] = useState<ZoneRoleAssignment[]>([]);
 
   // Password reset dialog state
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -156,24 +158,32 @@ export function AdminStaff() {
       const userIds = (data || []).map(d => d.id);
       let zoneAssignmentsMap: Record<string, ZoneRoleAssignment[]> = {};
       
+      // Fetch all zone role assignments for the tenant (not just for current staff)
+      const { data: allAssignments } = await supabase
+        .from('zone_role_assignments')
+        .select(`
+          id,
+          user_id,
+          zone_id,
+          role,
+          zones (id, name, color)
+        `)
+        .eq('tenant_id', profile.tenant_id);
+      
+      setAllZoneAssignments((allAssignments || []).map(za => ({
+        ...za,
+        zone: za.zones as Zone
+      })));
+      
       if (userIds.length > 0) {
-        const { data: zoneAssignments } = await supabase
-          .from('zone_role_assignments')
-          .select(`
-            id,
-            user_id,
-            zone_id,
-            role,
-            zones (id, name, color)
-          `)
-          .in('user_id', userIds);
-        
-        zoneAssignmentsMap = (zoneAssignments || []).reduce((acc, za) => {
-          if (!acc[za.user_id]) acc[za.user_id] = [];
-          acc[za.user_id].push({
-            ...za,
-            zone: za.zones as Zone
-          });
+        zoneAssignmentsMap = (allAssignments || []).reduce((acc, za) => {
+          if (userIds.includes(za.user_id)) {
+            if (!acc[za.user_id]) acc[za.user_id] = [];
+            acc[za.user_id].push({
+              ...za,
+              zone: za.zones as Zone
+            });
+          }
           return acc;
         }, {} as Record<string, ZoneRoleAssignment[]>);
       }
@@ -516,6 +526,34 @@ export function AdminStaff() {
         : [...prev, zoneId]
     );
   };
+
+  // Get zones with conflicts (another user has the same role in that zone)
+  const getZoneConflicts = () => {
+    if (!editingMember || !isStationRole(editForm.role)) return [];
+    
+    const conflicts: { zoneName: string; userName: string }[] = [];
+    
+    selectedZones.forEach(zoneId => {
+      const existingAssignment = allZoneAssignments.find(
+        za => za.zone_id === zoneId && 
+              za.role === editForm.role && 
+              za.user_id !== editingMember.id
+      );
+      
+      if (existingAssignment) {
+        const zone = zones.find(z => z.id === zoneId);
+        const assignedUser = staff.find(s => s.id === existingAssignment.user_id);
+        conflicts.push({
+          zoneName: zone?.name || 'Unknown Zone',
+          userName: assignedUser?.full_name || 'Another user',
+        });
+      }
+    });
+    
+    return conflicts;
+  };
+
+  const zoneConflicts = getZoneConflicts();
 
   return (
     <div className="p-6 space-y-6">
@@ -941,6 +979,25 @@ export function AdminStaff() {
                   <p className="text-xs text-muted-foreground">
                     {selectedZones.length} zone{selectedZones.length > 1 ? 's' : ''} selected
                   </p>
+                )}
+                
+                {zoneConflicts.length > 0 && (
+                  <Alert variant="default" className="mt-3 border-amber-500/50 bg-amber-500/10">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                    <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
+                      {zoneConflicts.length === 1 ? (
+                        <>
+                          <strong>{zoneConflicts[0].userName}</strong> is already assigned as {editForm.role.replace(/_/g, ' ')} in <strong>{zoneConflicts[0].zoneName}</strong>. 
+                          Saving will replace their assignment.
+                        </>
+                      ) : (
+                        <>
+                          Other {editForm.role.replace(/_/g, ' ')}s are already assigned in: {zoneConflicts.map(c => c.zoneName).join(', ')}. 
+                          Saving will replace their assignments.
+                        </>
+                      )}
+                    </AlertDescription>
+                  </Alert>
                 )}
               </div>
             )}
