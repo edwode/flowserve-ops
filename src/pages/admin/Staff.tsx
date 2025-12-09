@@ -17,6 +17,7 @@ interface Zone {
   id: string;
   name: string;
   color: string;
+  event_id: string;
 }
 
 interface Event {
@@ -39,7 +40,7 @@ interface StaffMember {
   is_active: boolean;
   zone_id: string | null;
   event_id: string | null;
-  zone?: Zone | null;
+  zone?: { id: string; name: string; color: string } | null;
   event?: Event | null;
   user_roles: Array<{
     role: string;
@@ -211,7 +212,7 @@ export function AdminStaff() {
 
       const { data, error } = await supabase
         .from('zones')
-        .select('id, name, color')
+        .select('id, name, color, event_id')
         .eq('tenant_id', profile.tenant_id)
         .order('name');
 
@@ -221,6 +222,11 @@ export function AdminStaff() {
       console.error("Error fetching zones:", error);
     }
   };
+
+  // Filter zones by selected event
+  const filteredZones = editForm.eventId && editForm.eventId !== 'none'
+    ? zones.filter(z => z.event_id === editForm.eventId)
+    : zones;
 
   const fetchEvents = async () => {
     try {
@@ -472,6 +478,12 @@ export function AdminStaff() {
     // Set selected zones from existing zone assignments
     setSelectedZones((member.zone_assignments || []).map(za => za.zone_id));
     setEditDialogOpen(true);
+  };
+
+  // Clear zone selections when event changes (since zones are event-specific)
+  const handleEventChange = (eventId: string) => {
+    setEditForm({ ...editForm, eventId, zoneId: 'none' });
+    setSelectedZones([]);
   };
 
   const openPasswordDialog = (member: StaffMember) => {
@@ -822,61 +834,68 @@ export function AdminStaff() {
               </Select>
             </div>
 
-            {/* Waiter-specific: Single zone and event assignment */}
-            {editForm.role === 'waiter' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="editEvent">Assigned Event</Label>
-                  <Select
-                    value={editForm.eventId}
-                    onValueChange={(value) => setEditForm({ ...editForm, eventId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="No event assigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No event assigned (all events)</SelectItem>
-                      {events.map((event) => (
-                        <SelectItem key={event.id} value={event.id}>
-                          {event.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Waiters will only see this event when creating orders
-                  </p>
-                </div>
+            {/* Event assignment for waiter and station roles */}
+            {(editForm.role === 'waiter' || isStationRole(editForm.role)) && (
+              <div className="space-y-2">
+                <Label htmlFor="editEvent">Assigned Event</Label>
+                <Select
+                  value={editForm.eventId}
+                  onValueChange={handleEventChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No event assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No event assigned (all events)</SelectItem>
+                    {events.map((event) => (
+                      <SelectItem key={event.id} value={event.id}>
+                        {event.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {editForm.role === 'waiter' 
+                    ? 'Waiters will only see this event when creating orders'
+                    : 'Station staff will only operate within this event'
+                  }
+                </p>
+              </div>
+            )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="editZone">Assigned Zone</Label>
-                  <Select
-                    value={editForm.zoneId}
-                    onValueChange={(value) => setEditForm({ ...editForm, zoneId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="No zone assigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No zone assigned (all tables)</SelectItem>
-                      {zones.map((zone) => (
-                        <SelectItem key={zone.id} value={zone.id}>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: zone.color }}
-                            />
-                            {zone.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Waiters will only see tables in their assigned zone
-                  </p>
-                </div>
-              </>
+            {/* Waiter-specific: Single zone assignment */}
+            {editForm.role === 'waiter' && (
+              <div className="space-y-2">
+                <Label htmlFor="editZone">Assigned Zone</Label>
+                <Select
+                  value={editForm.zoneId}
+                  onValueChange={(value) => setEditForm({ ...editForm, zoneId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No zone assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No zone assigned (all tables)</SelectItem>
+                    {filteredZones.map((zone) => (
+                      <SelectItem key={zone.id} value={zone.id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: zone.color }}
+                          />
+                          {zone.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {filteredZones.length === 0 && editForm.eventId !== 'none'
+                    ? 'No zones available for the selected event'
+                    : 'Waiters will only see tables in their assigned zone'
+                  }
+                </p>
+              </div>
             )}
 
             {/* Station roles: Multi-zone assignment */}
@@ -887,9 +906,9 @@ export function AdminStaff() {
                   Select zones where this {editForm.role.replace(/_/g, ' ')} will operate. Only one {editForm.role.replace(/_/g, ' ')} can be assigned per zone.
                 </p>
                 
-                {zones.length > 0 ? (
+                {filteredZones.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                    {zones.map((zone) => (
+                    {filteredZones.map((zone) => (
                       <div key={zone.id} className="flex items-center space-x-2">
                         <Checkbox
                           id={`zone-${zone.id}`}
@@ -911,7 +930,10 @@ export function AdminStaff() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
-                    No zones available. Create zones in the Tables section first.
+                    {editForm.eventId !== 'none' 
+                      ? 'No zones available for the selected event. Create zones in the Tables section first.'
+                      : 'No zones available. Create zones in the Tables section first.'
+                    }
                   </p>
                 )}
                 
