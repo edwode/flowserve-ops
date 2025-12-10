@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -96,6 +96,7 @@ const Cashier = () => {
   const [processing, setProcessing] = useState(false);
   const [expandedPaymentTables, setExpandedPaymentTables] = useState<Set<string>>(new Set());
   const [expandedReturnTables, setExpandedReturnTables] = useState<Set<string>>(new Set());
+  const [showPaidOrders, setShowPaidOrders] = useState(false);
 
   // Group orders by table for Payments tab
   const groupedOrders = useMemo(() => {
@@ -202,8 +203,12 @@ const Cashier = () => {
     setLoading(false);
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (includePaid = showPaidOrders) => {
     try {
+      const statusFilter: ("served" | "ready" | "paid")[] = includePaid 
+        ? ['served', 'ready', 'paid'] 
+        : ['served', 'ready'];
+      
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -223,7 +228,7 @@ const Cashier = () => {
             menu_items (name)
           )
         `)
-        .in('status', ['served', 'ready'])
+        .in('status', statusFilter)
         .order('served_at', { ascending: true, nullsFirst: false });
 
       if (error) throw error;
@@ -633,6 +638,32 @@ const Cashier = () => {
 
           {/* Payments Tab */}
           <TabsContent value="payments" className="space-y-3">
+            {/* Filter Toggle */}
+            <div className="flex justify-end">
+              <Button
+                variant={showPaidOrders ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => {
+                  const newValue = !showPaidOrders;
+                  setShowPaidOrders(newValue);
+                  fetchOrders(newValue);
+                }}
+                className="gap-2"
+              >
+                {showPaidOrders ? (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    Showing Paid Orders
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    Paid Orders Hidden
+                  </>
+                )}
+              </Button>
+            </div>
+            
             {orders.length === 0 ? (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground">No pending payments</p>
