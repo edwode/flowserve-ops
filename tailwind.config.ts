@@ -50,6 +50,10 @@ export default {
           DEFAULT: "hsl(var(--served))",
           foreground: "hsl(var(--served-foreground))",
         },
+        paid: {
+          DEFAULT: "hsl(var(--paid))",
+          foreground: "hsl(var(--paid-foreground))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",

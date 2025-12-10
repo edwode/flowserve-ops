@@ -248,7 +248,7 @@ const Waiter = () => {
       case 'served':
         return 'bg-served text-served-foreground';
       case 'paid':
-        return 'bg-muted text-muted-foreground';
+        return 'bg-paid text-paid-foreground';
       default:
         return 'bg-secondary text-secondary-foreground';
     }
