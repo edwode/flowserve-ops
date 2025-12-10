@@ -49,6 +49,10 @@ All colors MUST be HSL.
     --served: 210 70% 50%;
     --served-foreground: 0 0% 100%;
 
+    /* Paid state - completed green */
+    --paid: 158 64% 40%;
+    --paid-foreground: 0 0% 100%;
+
     --border: 220 15% 88%;
     --input: 220 15% 88%;
     --ring: 188 94% 35%;
@@ -102,6 +106,10 @@ All colors MUST be HSL.
     /* Served state - soft blue */
     --served: 210 65% 55%;
     --served-foreground: 0 0% 100%;
+
+    /* Paid state - completed green */
+    --paid: 158 58% 45%;
+    --paid-foreground: 0 0% 100%;
 
     --border: 220 14% 18%;
     --input: 220 14% 18%;
