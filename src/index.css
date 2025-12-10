@@ -45,6 +45,10 @@ All colors MUST be HSL.
     --pending: 48 96% 53%;
     --pending-foreground: 220 15% 12%;
 
+    /* Served state - soft blue */
+    --served: 210 70% 50%;
+    --served-foreground: 0 0% 100%;
+
     --border: 220 15% 88%;
     --input: 220 15% 88%;
     --ring: 188 94% 35%;
@@ -94,6 +98,10 @@ All colors MUST be HSL.
 
     --pending: 48 92% 58%;
     --pending-foreground: 220 18% 8%;
+
+    /* Served state - soft blue */
+    --served: 210 65% 55%;
+    --served-foreground: 0 0% 100%;
 
     --border: 220 14% 18%;
     --input: 220 14% 18%;
