@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit } from "lucide-react";
+import { Plus, Edit, Settings, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { useTenantCurrency } from "@/hooks/useTenantCurrency";
@@ -24,6 +24,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface MenuItem {
   id: string;
@@ -42,11 +52,19 @@ interface Event {
   name: string;
 }
 
+interface MenuCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  display_order: number;
+}
+
 export function AdminMenu() {
   const { toast } = useToast();
   const { formatPrice } = useTenantCurrency();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -59,9 +77,21 @@ export function AdminMenu() {
     event_id: "",
   });
 
+  // Category management state
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: "",
+    description: "",
+    display_order: "0",
+  });
+  const [deleteCategoryDialogOpen, setDeleteCategoryDialogOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<MenuCategory | null>(null);
+
   useEffect(() => {
     fetchEvents();
     fetchMenuItems();
+    fetchCategories();
   }, []);
 
   useEffect(() => {
@@ -81,6 +111,24 @@ export function AdminMenu() {
     } catch (error: any) {
       toast({
         title: "Error loading events",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error loading categories",
         description: error.message,
         variant: "destructive",
       });
@@ -112,8 +160,6 @@ export function AdminMenu() {
   };
 
   const handleOpenDialog = (item?: MenuItem) => {
-    console.log("handleOpenDialog called", { item });
-
     if (item) {
       setEditingItem(item);
       setFormData({
@@ -141,9 +187,6 @@ export function AdminMenu() {
 
   const handleSave = async () => {
     try {
-      console.log('Starting handleSave with formData:', formData);
-      
-      // Validate required fields
       if (!formData.name || !formData.category || !formData.price) {
         toast({
           title: "Validation Error",
@@ -154,7 +197,6 @@ export function AdminMenu() {
       }
 
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('Current user:', user?.id);
       
       if (!user) {
         toast({
@@ -170,8 +212,6 @@ export function AdminMenu() {
         .select('tenant_id')
         .eq('id', user.id)
         .single();
-
-      console.log('Profile data:', profile, 'Error:', profileError);
 
       if (profileError || !profile?.tenant_id) {
         toast({
@@ -195,16 +235,11 @@ export function AdminMenu() {
         ...(editingItem ? { updated_by: user.id } : { created_by: user.id }),
       };
 
-      console.log('Attempting to save item:', itemData);
-
       if (editingItem) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('menu_items')
           .update(itemData)
-          .eq('id', editingItem.id)
-          .select();
-
-        console.log('Update result:', data, 'Error:', error);
+          .eq('id', editingItem.id);
 
         if (error) throw error;
         toast({ 
@@ -212,12 +247,9 @@ export function AdminMenu() {
           description: "Menu item updated successfully" 
         });
       } else {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('menu_items')
-          .insert(itemData)
-          .select();
-
-        console.log('Insert result:', data, 'Error:', error);
+          .insert(itemData);
 
         if (error) throw error;
         toast({ 
@@ -229,10 +261,123 @@ export function AdminMenu() {
       setDialogOpen(false);
       await fetchMenuItems();
     } catch (error: any) {
-      console.error('Error in handleSave:', error);
       toast({
         title: "Error saving menu item",
         description: error.message || "An unexpected error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Category management functions
+  const handleOpenCategoryDialog = (category?: MenuCategory) => {
+    if (category) {
+      setEditingCategory(category);
+      setCategoryFormData({
+        name: category.name,
+        description: category.description || "",
+        display_order: category.display_order.toString(),
+      });
+    } else {
+      setEditingCategory(null);
+      setCategoryFormData({
+        name: "",
+        description: "",
+        display_order: "0",
+      });
+    }
+    setCategoryDialogOpen(true);
+  };
+
+  const handleSaveCategory = async () => {
+    try {
+      if (!categoryFormData.name) {
+        toast({
+          title: "Validation Error",
+          description: "Category name is required",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Authentication Error",
+          description: "You must be logged in",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.tenant_id) {
+        toast({
+          title: "Profile Error",
+          description: "Unable to find your tenant information",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const categoryData = {
+        name: categoryFormData.name.trim(),
+        description: categoryFormData.description.trim() || null,
+        display_order: parseInt(categoryFormData.display_order) || 0,
+        tenant_id: profile.tenant_id,
+      };
+
+      if (editingCategory) {
+        const { error } = await supabase
+          .from('menu_categories')
+          .update(categoryData)
+          .eq('id', editingCategory.id);
+
+        if (error) throw error;
+        toast({ title: "Category updated successfully" });
+      } else {
+        const { error } = await supabase
+          .from('menu_categories')
+          .insert(categoryData);
+
+        if (error) throw error;
+        toast({ title: "Category created successfully" });
+      }
+
+      setCategoryDialogOpen(false);
+      await fetchCategories();
+    } catch (error: any) {
+      toast({
+        title: "Error saving category",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('menu_categories')
+        .delete()
+        .eq('id', categoryToDelete.id);
+
+      if (error) throw error;
+      toast({ title: "Category deleted successfully" });
+      setDeleteCategoryDialogOpen(false);
+      setCategoryToDelete(null);
+      await fetchCategories();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting category",
+        description: error.message,
         variant: "destructive",
       });
     }
@@ -251,10 +396,16 @@ export function AdminMenu() {
           <h2 className="text-2xl font-bold">Menu Items</h2>
           <p className="text-muted-foreground">Manage menu items and inventory</p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Item
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => handleOpenCategoryDialog()}>
+            <Settings className="mr-2 h-4 w-4" />
+            Manage Categories
+          </Button>
+          <Button onClick={() => handleOpenDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Item
+          </Button>
+        </div>
       </div>
 
       <Tabs value={selectedEvent} onValueChange={setSelectedEvent}>
@@ -321,6 +472,7 @@ export function AdminMenu() {
         </TabsContent>
       </Tabs>
 
+      {/* Menu Item Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -346,11 +498,32 @@ export function AdminMenu() {
 
             <div className="space-y-2">
               <Label>Category *</Label>
-              <Input
+              <Select
                 value={formData.category}
-                onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
-                placeholder="Drinks, Meals, Cocktails, etc."
-              />
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.name}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {categories.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No categories yet. <button 
+                    type="button" 
+                    className="text-primary underline"
+                    onClick={() => handleOpenCategoryDialog()}
+                  >
+                    Create one
+                  </button>
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -441,6 +614,117 @@ export function AdminMenu() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Category Management Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory ? "Edit Category" : "Manage Categories"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCategory ? "Update category details" : "Add or manage menu categories"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!editingCategory && categories.length > 0 && (
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {categories.map((category) => (
+                <div key={category.id} className="flex items-center justify-between p-2 border rounded-md">
+                  <div>
+                    <span className="font-medium">{category.name}</span>
+                    {category.description && (
+                      <p className="text-xs text-muted-foreground">{category.description}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenCategoryDialog(category)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setCategoryToDelete(category);
+                        setDeleteCategoryDialogOpen(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-4 border-t pt-4">
+            <h4 className="font-medium text-sm">
+              {editingCategory ? "Edit Category" : "Add New Category"}
+            </h4>
+            <div className="space-y-2">
+              <Label>Name *</Label>
+              <Input
+                value={categoryFormData.name}
+                onChange={(e) => setCategoryFormData((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g., Drinks, Meals, Cocktails"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={categoryFormData.description}
+                onChange={(e) => setCategoryFormData((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Optional description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Display Order</Label>
+              <Input
+                type="number"
+                value={categoryFormData.display_order}
+                onChange={(e) => setCategoryFormData((prev) => ({ ...prev, display_order: e.target.value }))}
+                placeholder="0"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCategoryDialogOpen(false);
+                setEditingCategory(null);
+              }}
+            >
+              {editingCategory ? "Cancel" : "Close"}
+            </Button>
+            <Button onClick={handleSaveCategory} disabled={!categoryFormData.name}>
+              {editingCategory ? "Update" : "Add Category"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Category Confirmation */}
+      <AlertDialog open={deleteCategoryDialogOpen} onOpenChange={setDeleteCategoryDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{categoryToDelete?.name}"? This action cannot be undone.
+              Note: Menu items using this category will retain their category value.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteCategory}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
