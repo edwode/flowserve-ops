@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, LogOut } from "lucide-react";
+import { Loader2, Plus, LogOut, ChevronDown, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -13,6 +13,11 @@ import { OfflineStorage } from "@/lib/offlineStorage";
 import { offlineQueue } from "@/lib/offlineQueue";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useTenantCurrency } from "@/hooks/useTenantCurrency";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface Order {
   id: string;
@@ -24,6 +29,16 @@ interface Order {
   created_at: string;
 }
 
+const STATUS_PRIORITY: Record<string, number> = {
+  pending: 1,
+  dispatched: 2,
+  ready: 3,
+  served: 4,
+  paid: 5,
+  rejected: 6,
+  returned: 7,
+};
+
 const Waiter = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -33,6 +48,57 @@ const Waiter = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingCache, setUsingCache] = useState(false);
+  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+
+  // Group orders by table and sort by status priority
+  const groupedOrders = useMemo(() => {
+    const groups: Record<string, Order[]> = {};
+    
+    orders.forEach((order) => {
+      const tableKey = order.table_number || 'No Table';
+      if (!groups[tableKey]) {
+        groups[tableKey] = [];
+      }
+      groups[tableKey].push(order);
+    });
+
+    // Sort orders within each group by status priority
+    Object.keys(groups).forEach((tableKey) => {
+      groups[tableKey].sort((a, b) => {
+        const priorityA = STATUS_PRIORITY[a.status] || 99;
+        const priorityB = STATUS_PRIORITY[b.status] || 99;
+        return priorityA - priorityB;
+      });
+    });
+
+    // Sort table groups by the highest priority order in each group
+    const sortedTableKeys = Object.keys(groups).sort((a, b) => {
+      const highestPriorityA = Math.min(...groups[a].map(o => STATUS_PRIORITY[o.status] || 99));
+      const highestPriorityB = Math.min(...groups[b].map(o => STATUS_PRIORITY[o.status] || 99));
+      return highestPriorityA - highestPriorityB;
+    });
+
+    return { groups, sortedTableKeys };
+  }, [orders]);
+
+  // Initialize all tables as expanded on first load
+  useEffect(() => {
+    if (groupedOrders.sortedTableKeys.length > 0 && expandedTables.size === 0) {
+      setExpandedTables(new Set(groupedOrders.sortedTableKeys));
+    }
+  }, [groupedOrders.sortedTableKeys]);
+
+  const toggleTable = (tableKey: string) => {
+    setExpandedTables((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableKey)) {
+        next.delete(tableKey);
+      } else {
+        next.add(tableKey);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -236,33 +302,75 @@ const Waiter = () => {
               <p className="text-muted-foreground">No orders yet. Create your first order!</p>
             </Card>
           ) : (
-            orders.map((order) => (
-              <Card
-                key={order.id}
-                className="p-4 cursor-pointer hover:bg-accent/5 transition-colors"
-                onClick={() => navigate(`/waiter/order/${order.id}`)}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="font-semibold text-lg">{order.order_number}</div>
-                    <div className="text-sm text-muted-foreground">
-                      Table {order.table_number} • {order.guest_name}
-                    </div>
-                  </div>
-                  <Badge className={getStatusColor(order.status)}>
-                    {order.status}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {new Date(order.created_at).toLocaleTimeString()}
-                  </span>
-                  <span className="font-semibold">
-                    {formatPrice(order.total_amount)}
-                  </span>
-                </div>
-              </Card>
-            ))
+            <div className="space-y-3">
+              {groupedOrders.sortedTableKeys.map((tableKey) => {
+                const tableOrders = groupedOrders.groups[tableKey];
+                const isExpanded = expandedTables.has(tableKey);
+                const pendingCount = tableOrders.filter(o => o.status === 'pending').length;
+
+                return (
+                  <Collapsible
+                    key={tableKey}
+                    open={isExpanded}
+                    onOpenChange={() => toggleTable(tableKey)}
+                  >
+                    <Card className="overflow-hidden">
+                      <CollapsibleTrigger asChild>
+                        <button className="w-full p-3 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors text-left">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <span className="font-semibold">Table {tableKey}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''}
+                            </Badge>
+                            {pendingCount > 0 && (
+                              <Badge className="bg-pending text-pending-foreground text-xs">
+                                {pendingCount} pending
+                              </Badge>
+                            )}
+                          </div>
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="divide-y divide-border">
+                          {tableOrders.map((order) => (
+                            <div
+                              key={order.id}
+                              className="p-4 cursor-pointer hover:bg-accent/5 transition-colors"
+                              onClick={() => navigate(`/waiter/order/${order.id}`)}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <div className="font-semibold">{order.order_number}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {order.guest_name}
+                                  </div>
+                                </div>
+                                <Badge className={getStatusColor(order.status)}>
+                                  {order.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">
+                                  {new Date(order.created_at).toLocaleTimeString()}
+                                </span>
+                                <span className="font-semibold">
+                                  {formatPrice(order.total_amount)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Card>
+                  </Collapsible>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
