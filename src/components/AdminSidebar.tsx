@@ -1,4 +1,4 @@
-import { Calendar, Users, UtensilsCrossed, BarChart3, Settings, Package, Table2, TrendingUp } from "lucide-react";
+import { Calendar, Users, UtensilsCrossed, BarChart3, Settings, Package, Table2, TrendingUp, Tags } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
