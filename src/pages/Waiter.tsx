@@ -81,10 +81,22 @@ const Waiter = () => {
     return { groups, sortedTableKeys };
   }, [orders]);
 
-  // Initialize all tables as expanded on first load
+  // Initialize all tables as expanded - add any new tables that appear
   useEffect(() => {
-    if (groupedOrders.sortedTableKeys.length > 0 && expandedTables.size === 0) {
-      setExpandedTables(new Set(groupedOrders.sortedTableKeys));
+    if (groupedOrders.sortedTableKeys.length > 0) {
+      setExpandedTables((prev) => {
+        const next = new Set(prev);
+        groupedOrders.sortedTableKeys.forEach((key) => {
+          if (!prev.has(key)) {
+            next.add(key);
+          }
+        });
+        // If this is the first load (no tables were expanded), expand all
+        if (prev.size === 0) {
+          return new Set(groupedOrders.sortedTableKeys);
+        }
+        return next;
+      });
     }
   }, [groupedOrders.sortedTableKeys]);
 
