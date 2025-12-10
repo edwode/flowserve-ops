@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer } from "lucide-react";
+import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useTenantCurrency } from "@/hooks/useTenantCurrency";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +94,72 @@ const Cashier = () => {
   });
   const [paymentNotes, setPaymentNotes] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [expandedPaymentTables, setExpandedPaymentTables] = useState<Set<string>>(new Set());
+  const [expandedReturnTables, setExpandedReturnTables] = useState<Set<string>>(new Set());
+
+  // Group orders by table for Payments tab
+  const groupedOrders = useMemo(() => {
+    const groups: Record<string, Order[]> = {};
+    orders.forEach((order) => {
+      const tableKey = order.table_number || 'No Table';
+      if (!groups[tableKey]) {
+        groups[tableKey] = [];
+      }
+      groups[tableKey].push(order);
+    });
+    // Sort tables alphabetically
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [orders]);
+
+  // Group returns by table for Returns tab
+  const groupedReturns = useMemo(() => {
+    const groups: Record<string, OrderReturn[]> = {};
+    returns.forEach((returnItem) => {
+      const tableKey = returnItem.order_items.orders.table_number || 'No Table';
+      if (!groups[tableKey]) {
+        groups[tableKey] = [];
+      }
+      groups[tableKey].push(returnItem);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [returns]);
+
+  const togglePaymentTable = (tableKey: string) => {
+    setExpandedPaymentTables(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tableKey)) {
+        newSet.delete(tableKey);
+      } else {
+        newSet.add(tableKey);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleReturnTable = (tableKey: string) => {
+    setExpandedReturnTables(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tableKey)) {
+        newSet.delete(tableKey);
+      } else {
+        newSet.add(tableKey);
+      }
+      return newSet;
+    });
+  };
+
+  // Auto-expand all tables when data loads
+  useEffect(() => {
+    if (groupedOrders.length > 0) {
+      setExpandedPaymentTables(new Set(groupedOrders.map(([tableKey]) => tableKey)));
+    }
+  }, [groupedOrders.length]);
+
+  useEffect(() => {
+    if (groupedReturns.length > 0) {
+      setExpandedReturnTables(new Set(groupedReturns.map(([tableKey]) => tableKey)));
+    }
+  }, [groupedReturns.length]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -571,65 +638,99 @@ const Cashier = () => {
                 <p className="text-muted-foreground">No pending payments</p>
               </Card>
             ) : (
-              orders.map((order) => (
-                <Card
-                  key={order.id}
-                  className="p-4 hover:bg-accent/5 transition-colors cursor-pointer"
-                  onClick={() => setViewingOrder(order)}
+              groupedOrders.map(([tableKey, tableOrders]) => (
+                <Collapsible
+                  key={tableKey}
+                  open={expandedPaymentTables.has(tableKey)}
+                  onOpenChange={() => togglePaymentTable(tableKey)}
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-semibold text-lg">
-                          {order.order_number}
+                  <Card className="overflow-hidden">
+                    <CollapsibleTrigger asChild>
+                      <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/5 transition-colors">
+                        <div className="flex items-center gap-3">
+                          {expandedPaymentTables.has(tableKey) ? (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <div>
+                            <h3 className="font-semibold">Table {tableKey}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''} • 
+                              Total: {formatPrice(tableOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0))}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          Table {order.table_number}
-                          {order.guest_name && ` • ${order.guest_name}`}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Waiter: {order.profiles?.full_name || 'Unknown'}
-                        </div>
+                        <Badge variant="secondary">
+                          {tableOrders.length}
+                        </Badge>
                       </div>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status}
-                      </Badge>
-                    </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t border-border divide-y divide-border">
+                        {tableOrders.map((order) => (
+                          <div
+                            key={order.id}
+                            className="p-4 hover:bg-accent/5 transition-colors cursor-pointer"
+                            onClick={() => setViewingOrder(order)}
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="font-semibold text-lg">
+                                    {order.order_number}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {order.guest_name && `${order.guest_name}`}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Waiter: {order.profiles?.full_name || 'Unknown'}
+                                  </div>
+                                </div>
+                                <Badge className={getStatusColor(order.status)}>
+                                  {order.status}
+                                </Badge>
+                              </div>
 
-                    <div className="flex items-center justify-between border-t border-border pt-3">
-                      <div>
-                        <div className="text-2xl font-bold">
-                          {formatPrice(order.total_amount)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {order.served_at 
-                            ? `Served: ${new Date(order.served_at).toLocaleTimeString()}`
-                            : `Ordered: ${new Date(order.created_at).toLocaleTimeString()}`
-                          }
-                        </div>
+                              <div className="flex items-center justify-between border-t border-border pt-3">
+                                <div>
+                                  <div className="text-2xl font-bold">
+                                    {formatPrice(order.total_amount)}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {order.served_at 
+                                      ? `Served: ${new Date(order.served_at).toLocaleTimeString()}`
+                                      : `Ordered: ${new Date(order.created_at).toLocaleTimeString()}`
+                                    }
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSplitPaymentOrder(order);
+                                    }}
+                                  >
+                                    <Split className="mr-2 h-4 w-4" />
+                                    Split Bill
+                                  </Button>
+                                  <Button onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenPayment(order);
+                                  }}>
+                                    <DollarSign className="mr-2 h-4 w-4" />
+                                    Full Payment
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSplitPaymentOrder(order);
-                          }}
-                        >
-                          <Split className="mr-2 h-4 w-4" />
-                          Split Bill
-                        </Button>
-                        <Button onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenPayment(order);
-                        }}>
-                          <DollarSign className="mr-2 h-4 w-4" />
-                          Full Payment
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
               ))
             )}
           </TabsContent>
@@ -641,63 +742,94 @@ const Cashier = () => {
                 <p className="text-muted-foreground">No confirmed returns</p>
               </Card>
             ) : (
-              returns.map((returnItem) => (
-                <Card
-                  key={returnItem.id}
-                  className="p-4 border-destructive/50"
+              groupedReturns.map(([tableKey, tableReturns]) => (
+                <Collapsible
+                  key={tableKey}
+                  open={expandedReturnTables.has(tableKey)}
+                  onOpenChange={() => toggleReturnTable(tableKey)}
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-semibold">
-                          {returnItem.order_items.orders.order_number}
+                  <Card className="overflow-hidden border-destructive/30">
+                    <CollapsibleTrigger asChild>
+                      <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/5 transition-colors">
+                        <div className="flex items-center gap-3">
+                          {expandedReturnTables.has(tableKey) ? (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <div>
+                            <h3 className="font-semibold">Table {tableKey}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {tableReturns.length} return{tableReturns.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          Table {returnItem.order_items.orders.table_number}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Reported by: {returnItem.profiles?.full_name || 'Unknown'}
-                        </div>
+                        <Badge variant="destructive">
+                          {tableReturns.length}
+                        </Badge>
                       </div>
-                      <Badge variant="destructive">
-                        <AlertTriangle className="mr-1 h-3 w-3" />
-                        Return
-                      </Badge>
-                    </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t border-border divide-y divide-border">
+                        {tableReturns.map((returnItem) => (
+                          <div
+                            key={returnItem.id}
+                            className="p-4"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="font-semibold">
+                                    {returnItem.order_items.orders.order_number}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Reported by: {returnItem.profiles?.full_name || 'Unknown'}
+                                  </div>
+                                </div>
+                                <Badge variant="destructive">
+                                  <AlertTriangle className="mr-1 h-3 w-3" />
+                                  Return
+                                </Badge>
+                              </div>
 
-                    <div className="border-t border-border pt-3">
-                      <div className="font-medium">
-                        {returnItem.order_items.menu_items.name}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Qty: {returnItem.order_items.quantity} • 
-                        {formatPrice(returnItem.order_items.price)} each
-                      </div>
-                      <div className="text-sm text-destructive mt-2">
-                        Reason: {returnItem.reason}
-                      </div>
-                    </div>
+                              <div className="border-t border-border pt-3">
+                                <div className="font-medium">
+                                  {returnItem.order_items.menu_items.name}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  Qty: {returnItem.order_items.quantity} • 
+                                  {formatPrice(returnItem.order_items.price)} each
+                                </div>
+                                <div className="text-sm text-destructive mt-2">
+                                  Reason: {returnItem.reason}
+                                </div>
+                              </div>
 
-                    <div className="flex items-center justify-between border-t border-border pt-3">
-                      <div className="text-lg font-bold">
-                        Refund: {formatPrice(returnItem.refund_amount || 
-                          returnItem.order_items.price * returnItem.order_items.quantity
-                        )}
+                              <div className="flex items-center justify-between border-t border-border pt-3">
+                                <div className="text-lg font-bold">
+                                  Refund: {formatPrice(returnItem.refund_amount || 
+                                    returnItem.order_items.price * returnItem.order_items.quantity
+                                  )}
+                                </div>
+                                {!returnItem.refund_amount && (
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => handleApproveRefund(returnItem)}
+                                  >
+                                    Approve Refund
+                                  </Button>
+                                )}
+                                {returnItem.refund_amount && (
+                                  <Badge variant="secondary">Approved</Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      {!returnItem.refund_amount && (
-                        <Button
-                          variant="outline"
-                          onClick={() => handleApproveRefund(returnItem)}
-                        >
-                          Approve Refund
-                        </Button>
-                      )}
-                      {returnItem.refund_amount && (
-                        <Badge variant="secondary">Approved</Badge>
-                      )}
-                    </div>
-                  </div>
-                </Card>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
               ))
             )}
           </TabsContent>
