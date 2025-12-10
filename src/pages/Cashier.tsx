@@ -100,6 +100,7 @@ const Cashier = () => {
 
   // Group orders by table for Payments tab
   const groupedOrders = useMemo(() => {
+    const statusPriority: Record<string, number> = { served: 0, paid: 1 };
     const groups: Record<string, Order[]> = {};
     orders.forEach((order) => {
       const tableKey = order.table_number || 'No Table';
@@ -107,6 +108,10 @@ const Cashier = () => {
         groups[tableKey] = [];
       }
       groups[tableKey].push(order);
+    });
+    // Sort orders within each group by status priority (served first, then paid)
+    Object.values(groups).forEach((groupOrders) => {
+      groupOrders.sort((a, b) => (statusPriority[a.status] ?? 99) - (statusPriority[b.status] ?? 99));
     });
     // Sort tables alphabetically
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
