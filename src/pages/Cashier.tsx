@@ -960,9 +960,10 @@ const Cashier = () => {
                             return (
                               <div
                                 key={order.id}
-                                className={`p-4 hover:bg-accent/5 transition-colors cursor-pointer ${isSelected ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                                className={`p-4 hover:bg-accent/5 transition-colors ${isPaid ? 'cursor-default opacity-75' : 'cursor-pointer'} ${isSelected ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
                                 onClick={() => {
-                                  if (selectionMode && !isPaid) {
+                                  if (isPaid) return;
+                                  if (selectionMode) {
                                     toggleOrderSelection(order.id);
                                   } else {
                                     setViewingOrder(order);
