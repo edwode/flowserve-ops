@@ -1080,17 +1080,17 @@ export function AdminStaff() {
               <div className="space-y-2">
                 <Label>Assigned Tables</Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select tables this waiter will be responsible for. Ad-hoc tables can be assigned to multiple waiters.
+                  Select tables this waiter will be responsible for. Ad-hoc tables are automatically visible to all waiters in the zone.
                 </p>
                 
                 {loadingTables ? (
                   <div className="flex items-center justify-center py-4">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
-                ) : zoneTables.length > 0 ? (
+                ) : zoneTables.filter(t => !t.is_adhoc).length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                    {zoneTables.map((table) => {
-                      const isAssignedToOther = !table.is_adhoc && table.assigned_waiter_id && table.assigned_waiter_id !== editingMember?.id;
+                    {zoneTables.filter(t => !t.is_adhoc).map((table) => {
+                      const isAssignedToOther = table.assigned_waiter_id && table.assigned_waiter_id !== editingMember?.id;
                       return (
                         <div key={table.id} className="flex items-center space-x-2">
                           <Checkbox
@@ -1103,11 +1103,6 @@ export function AdminStaff() {
                             className="flex items-center gap-2 text-sm cursor-pointer flex-1"
                           >
                             <span>{table.table_number}</span>
-                            {table.is_adhoc && (
-                              <Badge variant="secondary" className="text-xs bg-purple-500/20 text-purple-700 dark:text-purple-300">
-                                Ad-hoc
-                              </Badge>
-                            )}
                             {isAssignedToOther && (
                               <span className="text-xs text-muted-foreground">
                                 (assigned to {table.assigned_waiter_name})
@@ -1120,7 +1115,7 @@ export function AdminStaff() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
-                    No tables available in this zone. Create tables in the Tables section first.
+                    No assignable tables in this zone. Ad-hoc tables are automatically available to all waiters.
                   </p>
                 )}
                 
