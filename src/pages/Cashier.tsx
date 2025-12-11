@@ -77,6 +77,27 @@ interface OrderReturn {
   };
 }
 
+interface ConsolidatedPaymentGroup {
+  tableNumber: string;
+  paidAt: string;
+  orders: Array<{
+    id: string;
+    order_number: string;
+    total_amount: number;
+    guest_name: string | null;
+    order_items?: Array<{
+      id: string;
+      quantity: number;
+      price: number;
+      menu_item: {
+        name: string;
+      };
+    }>;
+  }>;
+  totalAmount: number;
+  paymentMethod: string;
+}
+
 const Cashier = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -85,6 +106,7 @@ const Cashier = () => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
+  const [consolidatedGroups, setConsolidatedGroups] = useState<ConsolidatedPaymentGroup[]>([]);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [splitPaymentOrder, setSplitPaymentOrder] = useState<Order | null>(null);
@@ -98,6 +120,7 @@ const Cashier = () => {
   const [processing, setProcessing] = useState(false);
   const [expandedPaymentTables, setExpandedPaymentTables] = useState<Set<string>>(new Set());
   const [expandedReturnTables, setExpandedReturnTables] = useState<Set<string>>(new Set());
+  const [expandedConsolidatedGroups, setExpandedConsolidatedGroups] = useState<Set<string>>(new Set());
   const [showPaidOrders, setShowPaidOrders] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
@@ -206,6 +229,18 @@ const Cashier = () => {
     });
   };
 
+  const toggleConsolidatedGroup = (groupKey: string) => {
+    setExpandedConsolidatedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupKey)) {
+        newSet.delete(groupKey);
+      } else {
+        newSet.add(groupKey);
+      }
+      return newSet;
+    });
+  };
+
   // Auto-expand all tables when data loads
   useEffect(() => {
     if (groupedOrders.length > 0) {
@@ -218,6 +253,12 @@ const Cashier = () => {
       setExpandedReturnTables(new Set(groupedReturns.map(([tableKey]) => tableKey)));
     }
   }, [groupedReturns.length]);
+
+  useEffect(() => {
+    if (consolidatedGroups.length > 0) {
+      setExpandedConsolidatedGroups(new Set(consolidatedGroups.map((_, idx) => `consolidated-${idx}`)));
+    }
+  }, [consolidatedGroups.length]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -256,7 +297,7 @@ const Cashier = () => {
   }, [authLoading, user]);
 
   const fetchData = async () => {
-    await Promise.all([fetchOrders(), fetchReturns()]);
+    await Promise.all([fetchOrders(), fetchReturns(), fetchConsolidatedPayments()]);
     setLoading(false);
   };
 
@@ -335,6 +376,94 @@ const Cashier = () => {
     } catch (error: any) {
       toast({
         title: "Error loading returns",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchConsolidatedPayments = async () => {
+    try {
+      // Fetch payments with consolidated notes
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select(`
+          id,
+          order_id,
+          amount,
+          payment_method,
+          created_at,
+          notes,
+          orders (
+            id,
+            order_number,
+            table_number,
+            guest_name,
+            total_amount,
+            paid_at,
+            order_items (
+              id,
+              quantity,
+              price,
+              menu_items (name)
+            )
+          )
+        `)
+        .like('notes', '%[Consolidated%')
+        .order('created_at', { ascending: false });
+
+      if (paymentsError) throw paymentsError;
+
+      // Group by paid_at timestamp (within a 5-second window) and table
+      const groups: Record<string, ConsolidatedPaymentGroup> = {};
+      
+      (paymentsData || []).forEach((payment: any) => {
+        if (!payment.orders) return;
+        
+        const paidAt = payment.orders.paid_at || payment.created_at;
+        const tableNumber = payment.orders.table_number || 'N/A';
+        // Create a key based on table and approximate time (within 5 seconds)
+        const timeKey = Math.floor(new Date(paidAt).getTime() / 5000);
+        const groupKey = `${tableNumber}-${timeKey}`;
+        
+        if (!groups[groupKey]) {
+          groups[groupKey] = {
+            tableNumber,
+            paidAt,
+            orders: [],
+            totalAmount: 0,
+            paymentMethod: payment.payment_method,
+          };
+        }
+        
+        // Check if this order is already in the group
+        const existingOrder = groups[groupKey].orders.find(o => o.id === payment.orders.id);
+        if (!existingOrder) {
+          groups[groupKey].orders.push({
+            id: payment.orders.id,
+            order_number: payment.orders.order_number,
+            total_amount: payment.orders.total_amount,
+            guest_name: payment.orders.guest_name,
+            order_items: payment.orders.order_items?.map((item: any) => ({
+              id: item.id,
+              quantity: item.quantity,
+              price: item.price,
+              menu_item: item.menu_items,
+            })),
+          });
+          groups[groupKey].totalAmount += payment.orders.total_amount || 0;
+        }
+      });
+      
+      // Filter to only show groups with 2+ orders (actual consolidations)
+      const consolidatedGroupsArray = Object.values(groups)
+        .filter(g => g.orders.length >= 2)
+        .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime());
+      
+      setConsolidatedGroups(consolidatedGroupsArray);
+    } catch (error: any) {
+      toast({
+        title: "Error loading consolidated payments",
         description: error.message,
         variant: "destructive",
       });
@@ -684,9 +813,12 @@ const Cashier = () => {
       {/* Content */}
       <div className="p-4">
         <Tabs defaultValue="payments" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="payments">
               Payments ({orders.length})
+            </TabsTrigger>
+            <TabsTrigger value="consolidated">
+              Consolidated ({consolidatedGroups.length})
             </TabsTrigger>
             <TabsTrigger value="returns">
               Returns ({returns.length})
@@ -903,6 +1035,92 @@ const Cashier = () => {
                               </div>
                             );
                           })}
+                        </div>
+                      </CollapsibleContent>
+                    </Card>
+                  </Collapsible>
+                );
+              })
+            )}
+          </TabsContent>
+
+          {/* Consolidated Tab */}
+          <TabsContent value="consolidated" className="space-y-3">
+            {consolidatedGroups.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No consolidated payments</p>
+              </Card>
+            ) : (
+              consolidatedGroups.map((group, idx) => {
+                const groupKey = `consolidated-${idx}`;
+                return (
+                  <Collapsible
+                    key={groupKey}
+                    open={expandedConsolidatedGroups.has(groupKey)}
+                    onOpenChange={() => toggleConsolidatedGroup(groupKey)}
+                  >
+                    <Card className="overflow-hidden border-primary/30">
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/5 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {expandedConsolidatedGroups.has(groupKey) ? (
+                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <div>
+                              <h3 className="font-semibold">Table {group.tableNumber}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {group.orders.length} orders • {new Date(group.paidAt).toLocaleDateString()} {new Date(group.paidAt).toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="capitalize">
+                              {group.paymentMethod}
+                            </Badge>
+                            <Badge className="bg-success text-success-foreground">
+                              {formatPrice(group.totalAmount)}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="border-t border-border divide-y divide-border">
+                          {group.orders.map((order) => (
+                            <div key={order.id} className="p-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="font-medium">{order.order_number}</div>
+                                  <Badge className="bg-success text-success-foreground">
+                                    Paid
+                                  </Badge>
+                                </div>
+                                {order.guest_name && (
+                                  <div className="text-sm text-muted-foreground">{order.guest_name}</div>
+                                )}
+                                <div className="space-y-1">
+                                  {order.order_items?.map((item) => (
+                                    <div key={item.id} className="flex items-center justify-between text-sm text-muted-foreground">
+                                      <span>{item.quantity}x {item.menu_item?.name}</span>
+                                      <span>{formatPrice(item.price * item.quantity)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex items-center justify-between pt-2 border-t border-border">
+                                  <span className="font-medium">Subtotal</span>
+                                  <span className="font-bold">{formatPrice(order.total_amount)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {/* Grand Total */}
+                          <div className="p-4 bg-muted/30">
+                            <div className="flex items-center justify-between">
+                              <span className="text-lg font-semibold">Grand Total</span>
+                              <span className="text-xl font-bold">{formatPrice(group.totalAmount)}</span>
+                            </div>
+                          </div>
                         </div>
                       </CollapsibleContent>
                     </Card>
