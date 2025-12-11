@@ -36,8 +36,9 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Clock, ArrowRightLeft, Plus, MapPin, Pencil, Trash2, MoreVertical } from "lucide-react";
+import { Users, Clock, ArrowRightLeft, Plus, MapPin, Pencil, Trash2, MoreVertical, UsersRound } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Zone {
@@ -56,6 +57,7 @@ interface Table {
   occupied_at: string | null;
   cleared_at: string | null;
   zone_id: string | null;
+  is_adhoc: boolean;
   zone?: Zone | null;
   order?: {
     order_number: string;
@@ -82,6 +84,7 @@ export default function Tables() {
   const [newTableNumber, setNewTableNumber] = useState("");
   const [newTableCapacity, setNewTableCapacity] = useState("4");
   const [newTableZone, setNewTableZone] = useState<string>("");
+  const [newTableIsAdhoc, setNewTableIsAdhoc] = useState(false);
   const [addTableOpen, setAddTableOpen] = useState(false);
   
   // Edit Table state
@@ -89,6 +92,7 @@ export default function Tables() {
   const [editTableNumber, setEditTableNumber] = useState("");
   const [editTableCapacity, setEditTableCapacity] = useState("");
   const [editTableZone, setEditTableZone] = useState("");
+  const [editTableIsAdhoc, setEditTableIsAdhoc] = useState(false);
   const [editTableOpen, setEditTableOpen] = useState(false);
   
   // Delete Table state
@@ -381,6 +385,7 @@ export default function Tables() {
       capacity: parseInt(newTableCapacity) || 4,
       status: "available",
       zone_id: newTableZone && newTableZone !== "none" ? newTableZone : null,
+      is_adhoc: newTableIsAdhoc,
     });
 
     if (error) {
@@ -396,6 +401,7 @@ export default function Tables() {
     setNewTableNumber("");
     setNewTableCapacity("4");
     setNewTableZone("");
+    setNewTableIsAdhoc(false);
     setAddTableOpen(false);
     fetchTables();
   };
@@ -405,6 +411,7 @@ export default function Tables() {
     setEditTableNumber(table.table_number);
     setEditTableCapacity(String(table.capacity));
     setEditTableZone(table.zone_id || "none");
+    setEditTableIsAdhoc(table.is_adhoc);
     setEditTableOpen(true);
   };
 
@@ -417,6 +424,7 @@ export default function Tables() {
         table_number: editTableNumber.trim(),
         capacity: parseInt(editTableCapacity) || 4,
         zone_id: editTableZone && editTableZone !== "none" ? editTableZone : null,
+        is_adhoc: editTableIsAdhoc,
       })
       .eq("id", editingTable.id);
 
@@ -692,6 +700,20 @@ export default function Tables() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is-adhoc"
+                    checked={newTableIsAdhoc}
+                    onCheckedChange={(checked) => setNewTableIsAdhoc(checked === true)}
+                  />
+                  <Label htmlFor="is-adhoc" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                    <UsersRound className="w-4 h-4 text-muted-foreground" />
+                    Ad-hoc Table
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground -mt-2">
+                  Ad-hoc tables can be accessed by all waiters assigned to this zone
+                </p>
                 <Button onClick={addTable} className="w-full">
                   Add Table
                 </Button>
@@ -797,6 +819,20 @@ export default function Tables() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="edit-is-adhoc"
+                checked={editTableIsAdhoc}
+                onCheckedChange={(checked) => setEditTableIsAdhoc(checked === true)}
+              />
+              <Label htmlFor="edit-is-adhoc" className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                <UsersRound className="w-4 h-4 text-muted-foreground" />
+                Ad-hoc Table
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Ad-hoc tables can be accessed by all waiters assigned to this zone
+            </p>
             <Button onClick={updateTable} className="w-full">
               Save Changes
             </Button>
@@ -932,7 +968,15 @@ export default function Tables() {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-xl">Table {table.table_number}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-xl">Table {table.table_number}</CardTitle>
+                    {table.is_adhoc && (
+                      <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-300">
+                        <UsersRound className="w-3 h-3 mr-1" />
+                        Ad-hoc
+                      </Badge>
+                    )}
+                  </div>
                   {table.zone && (
                     <div className="flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3 text-muted-foreground" />
