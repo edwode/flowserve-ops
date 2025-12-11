@@ -966,7 +966,7 @@ export default function Tables() {
               />
             )}
             <CardHeader>
-              <div className="flex justify-end items-center gap-2 mb-2">
+              <div className="flex justify-between items-center gap-2 mb-2">
                 {table.is_adhoc && (
                   <Badge variant="outline" className="px-1.5 bg-purple-500/10 text-purple-600 border-purple-300" title="Ad-hoc table">
                     <UsersRound className="w-3 h-3" />
