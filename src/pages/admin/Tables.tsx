@@ -966,47 +966,43 @@ export default function Tables() {
               />
             )}
             <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-base">Table {table.table_number}</CardTitle>
-                  {table.zone && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <MapPin className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">{table.zone.name}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {table.is_adhoc && (
-                    <Badge variant="outline" className="px-1.5 bg-purple-500/10 text-purple-600 border-purple-300" title="Ad-hoc table">
-                      <UsersRound className="w-3 h-3" />
-                    </Badge>
-                  )}
-                  <Badge className={getStatusColor(table.status)}>
-                    {getStatusLabel(table.status)}
+              <div className="flex justify-end items-center gap-2 mb-2">
+                {table.is_adhoc && (
+                  <Badge variant="outline" className="px-1.5 bg-purple-500/10 text-purple-600 border-purple-300" title="Ad-hoc table">
+                    <UsersRound className="w-3 h-3" />
                   </Badge>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="ghost" className="h-7 w-7">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditTable(table)}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Edit Table
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => setDeletingTable(table)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete Table
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                )}
+                <Badge className={getStatusColor(table.status)}>
+                  {getStatusLabel(table.status)}
+                </Badge>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-7 w-7">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openEditTable(table)}>
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit Table
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => setDeletingTable(table)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Table
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
+              <CardTitle className="text-base">Table {table.table_number}</CardTitle>
+              {table.zone && (
+                <div className="flex items-center gap-1 mt-1">
+                  <MapPin className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">{table.zone.name}</span>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2 text-sm">
