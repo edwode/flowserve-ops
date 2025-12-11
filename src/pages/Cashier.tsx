@@ -70,6 +70,7 @@ interface OrderReturn {
       order_number: string;
       table_number: string;
       total_amount: number;
+      status: string;
     };
   };
   profiles: {
@@ -303,6 +304,7 @@ const Cashier = () => {
 
   const fetchOrders = async (includePaid = showPaidOrders) => {
     try {
+      // Exclude 'returned' orders - they should only appear in Returns tab
       const statusFilter: ("served" | "ready" | "paid")[] = includePaid 
         ? ['served', 'ready', 'paid'] 
         : ['served', 'ready'];
@@ -327,6 +329,7 @@ const Cashier = () => {
           )
         `)
         .in('status', statusFilter)
+        .neq('status', 'returned')
         .order('served_at', { ascending: true, nullsFirst: false });
 
       if (error) throw error;
@@ -364,7 +367,7 @@ const Cashier = () => {
             quantity,
             price,
             menu_items (name),
-            orders (order_number, table_number, total_amount)
+            orders (order_number, table_number, total_amount, status)
           ),
           profiles!order_returns_reported_by_fkey (full_name)
         `)
@@ -770,6 +773,10 @@ const Cashier = () => {
         return 'bg-success text-success-foreground';
       case 'served':
         return 'bg-accent text-accent-foreground';
+      case 'paid':
+        return 'bg-[hsl(158_64%_40%)] text-white';
+      case 'returned':
+        return 'bg-destructive text-destructive-foreground';
       default:
         return 'bg-secondary text-secondary-foreground';
     }
@@ -1182,9 +1189,9 @@ const Cashier = () => {
                                     Reported by: {returnItem.profiles?.full_name || 'Unknown'}
                                   </div>
                                 </div>
-                                <Badge variant="destructive">
+                                <Badge className={getStatusColor(returnItem.order_items.orders.status || 'returned')}>
                                   <AlertTriangle className="mr-1 h-3 w-3" />
-                                  Return
+                                  {returnItem.order_items.orders.status === 'returned' ? 'Returned' : 'Return'}
                                 </Badge>
                               </div>
 
