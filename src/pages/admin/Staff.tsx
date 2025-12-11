@@ -34,6 +34,14 @@ interface ZoneRoleAssignment {
   zone?: Zone;
 }
 
+interface ZoneTable {
+  id: string;
+  table_number: string;
+  is_adhoc: boolean;
+  assigned_waiter_id: string | null;
+  assigned_waiter_name?: string | null;
+}
+
 interface StaffMember {
   id: string;
   full_name: string | null;
@@ -93,6 +101,11 @@ export function AdminStaff() {
   const [editForm, setEditForm] = useState({ fullName: '', phone: '', role: '', zoneId: '', eventId: '' });
   const [selectedZones, setSelectedZones] = useState<string[]>([]);
   const [allZoneAssignments, setAllZoneAssignments] = useState<ZoneRoleAssignment[]>([]);
+  
+  // Waiter table assignment state
+  const [zoneTables, setZoneTables] = useState<ZoneTable[]>([]);
+  const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+  const [loadingTables, setLoadingTables] = useState(false);
 
   // Password reset dialog state
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -376,6 +389,36 @@ export function AdminStaff() {
         await handleManageStaff('update_role', editingMember.id, { role: editForm.role });
       }
 
+      // Handle table assignments for waiters
+      if (editForm.role === 'waiter' && editForm.zoneId && editForm.zoneId !== 'none') {
+        // First, unassign all tables currently assigned to this waiter in the zone
+        const { error: unassignError } = await supabase
+          .from('tables')
+          .update({ assigned_waiter_id: null })
+          .eq('assigned_waiter_id', editingMember.id)
+          .eq('zone_id', editForm.zoneId);
+        
+        if (unassignError) console.error("Error unassigning tables:", unassignError);
+        
+        // Then assign selected tables to this waiter
+        if (selectedTableIds.length > 0) {
+          const { error: assignError } = await supabase
+            .from('tables')
+            .update({ assigned_waiter_id: editingMember.id })
+            .in('id', selectedTableIds);
+          
+          if (assignError) throw assignError;
+        }
+      } else if (editForm.role === 'waiter') {
+        // If waiter has no zone, unassign all their tables
+        const { error: unassignError } = await supabase
+          .from('tables')
+          .update({ assigned_waiter_id: null })
+          .eq('assigned_waiter_id', editingMember.id);
+        
+        if (unassignError) console.error("Error unassigning tables:", unassignError);
+      }
+
       // Handle zone assignments for station roles
       if (STATION_ROLES.includes(editForm.role)) {
         // Get current zone assignments
@@ -475,7 +518,45 @@ export function AdminStaff() {
     }
   };
 
-  const openEditDialog = (member: StaffMember) => {
+  // Fetch tables for a specific zone
+  const fetchTablesForZone = async (zoneId: string) => {
+    if (!zoneId || zoneId === 'none') {
+      setZoneTables([]);
+      return;
+    }
+    
+    setLoadingTables(true);
+    try {
+      const { data, error } = await supabase
+        .from('tables')
+        .select(`
+          id,
+          table_number,
+          is_adhoc,
+          assigned_waiter_id,
+          profiles:assigned_waiter_id (full_name)
+        `)
+        .eq('zone_id', zoneId)
+        .order('table_number');
+      
+      if (error) throw error;
+      
+      setZoneTables((data || []).map(t => ({
+        id: t.id,
+        table_number: t.table_number,
+        is_adhoc: t.is_adhoc,
+        assigned_waiter_id: t.assigned_waiter_id,
+        assigned_waiter_name: t.profiles?.full_name || null,
+      })));
+    } catch (error: any) {
+      console.error("Error fetching tables:", error);
+      setZoneTables([]);
+    } finally {
+      setLoadingTables(false);
+    }
+  };
+
+  const openEditDialog = async (member: StaffMember) => {
     setEditingMember(member);
     const role = member.user_roles[0]?.role || '';
     setEditForm({
@@ -487,6 +568,21 @@ export function AdminStaff() {
     });
     // Set selected zones from existing zone assignments
     setSelectedZones((member.zone_assignments || []).map(za => za.zone_id));
+    
+    // For waiters, fetch tables and set selected tables
+    if (role === 'waiter' && member.zone_id) {
+      await fetchTablesForZone(member.zone_id);
+      // Fetch tables assigned to this waiter
+      const { data: assignedTables } = await supabase
+        .from('tables')
+        .select('id')
+        .eq('assigned_waiter_id', member.id);
+      setSelectedTableIds((assignedTables || []).map(t => t.id));
+    } else {
+      setZoneTables([]);
+      setSelectedTableIds([]);
+    }
+    
     setEditDialogOpen(true);
   };
 
@@ -494,7 +590,50 @@ export function AdminStaff() {
   const handleEventChange = (eventId: string) => {
     setEditForm({ ...editForm, eventId, zoneId: 'none' });
     setSelectedZones([]);
+    setZoneTables([]);
+    setSelectedTableIds([]);
   };
+  
+  // Handle zone change for waiter to fetch tables
+  const handleWaiterZoneChange = async (zoneId: string) => {
+    setEditForm({ ...editForm, zoneId });
+    setSelectedTableIds([]);
+    if (zoneId !== 'none') {
+      await fetchTablesForZone(zoneId);
+    } else {
+      setZoneTables([]);
+    }
+  };
+  
+  // Toggle table selection for waiter
+  const handleTableToggle = (tableId: string) => {
+    setSelectedTableIds(prev => 
+      prev.includes(tableId) 
+        ? prev.filter(id => id !== tableId)
+        : [...prev, tableId]
+    );
+  };
+  
+  // Get table conflicts (non-adhoc tables assigned to another waiter)
+  const getTableConflicts = () => {
+    if (!editingMember || editForm.role !== 'waiter') return [];
+    
+    const conflicts: { tableNumber: string; waiterName: string }[] = [];
+    
+    selectedTableIds.forEach(tableId => {
+      const table = zoneTables.find(t => t.id === tableId);
+      if (table && !table.is_adhoc && table.assigned_waiter_id && table.assigned_waiter_id !== editingMember.id) {
+        conflicts.push({
+          tableNumber: table.table_number,
+          waiterName: table.assigned_waiter_name || 'Another waiter',
+        });
+      }
+    });
+    
+    return conflicts;
+  };
+  
+  const tableConflicts = getTableConflicts();
 
   const openPasswordDialog = (member: StaffMember) => {
     setPasswordMember(member);
@@ -907,7 +1046,7 @@ export function AdminStaff() {
                 <Label htmlFor="editZone">Assigned Zone</Label>
                 <Select
                   value={editForm.zoneId}
-                  onValueChange={(value) => setEditForm({ ...editForm, zoneId: value })}
+                  onValueChange={handleWaiterZoneChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="No zone assigned" />
@@ -933,6 +1072,82 @@ export function AdminStaff() {
                     : 'Waiters will only see tables in their assigned zone'
                   }
                 </p>
+              </div>
+            )}
+            
+            {/* Waiter table assignment */}
+            {editForm.role === 'waiter' && editForm.zoneId && editForm.zoneId !== 'none' && (
+              <div className="space-y-2">
+                <Label>Assigned Tables</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Select tables this waiter will be responsible for. Ad-hoc tables can be assigned to multiple waiters.
+                </p>
+                
+                {loadingTables ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : zoneTables.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                    {zoneTables.map((table) => {
+                      const isAssignedToOther = !table.is_adhoc && table.assigned_waiter_id && table.assigned_waiter_id !== editingMember?.id;
+                      return (
+                        <div key={table.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`table-${table.id}`}
+                            checked={selectedTableIds.includes(table.id)}
+                            onCheckedChange={() => handleTableToggle(table.id)}
+                          />
+                          <label 
+                            htmlFor={`table-${table.id}`}
+                            className="flex items-center gap-2 text-sm cursor-pointer flex-1"
+                          >
+                            <span>{table.table_number}</span>
+                            {table.is_adhoc && (
+                              <Badge variant="secondary" className="text-xs bg-purple-500/20 text-purple-700 dark:text-purple-300">
+                                Ad-hoc
+                              </Badge>
+                            )}
+                            {isAssignedToOther && (
+                              <span className="text-xs text-muted-foreground">
+                                (assigned to {table.assigned_waiter_name})
+                              </span>
+                            )}
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    No tables available in this zone. Create tables in the Tables section first.
+                  </p>
+                )}
+                
+                {selectedTableIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedTableIds.length} table{selectedTableIds.length > 1 ? 's' : ''} selected
+                  </p>
+                )}
+                
+                {tableConflicts.length > 0 && (
+                  <Alert variant="default" className="mt-3 border-amber-500/50 bg-amber-500/10">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                    <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
+                      {tableConflicts.length === 1 ? (
+                        <>
+                          Table <strong>{tableConflicts[0].tableNumber}</strong> is already assigned to <strong>{tableConflicts[0].waiterName}</strong>. 
+                          Saving will reassign it to this waiter.
+                        </>
+                      ) : (
+                        <>
+                          Tables {tableConflicts.map(c => c.tableNumber).join(', ')} are already assigned to other waiters. 
+                          Saving will reassign them to this waiter.
+                        </>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             )}
 
