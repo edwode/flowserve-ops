@@ -35,6 +35,9 @@ interface Table {
   table_number: string;
   capacity: number;
   status: string;
+  is_adhoc: boolean;
+  assigned_waiter_id: string | null;
+  zone_id: string | null;
   zone?: {
     name: string;
     color: string;
@@ -140,10 +143,10 @@ const NewOrder = () => {
   };
 
   const fetchTables = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !user) return;
 
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from("tables")
         .select(`
           id,
@@ -151,6 +154,8 @@ const NewOrder = () => {
           capacity,
           status,
           zone_id,
+          is_adhoc,
+          assigned_waiter_id,
           zone:zones (
             name,
             color
@@ -159,15 +164,27 @@ const NewOrder = () => {
         .eq("event_id", selectedEvent)
         .order("table_number");
 
-      // If waiter has a zone assigned, filter tables by that zone
+      if (error) throw error;
+
+      // Filter tables based on waiter's zone and assignment
+      let filteredTables = data || [];
+      
       if (waiterZoneId) {
-        query = query.eq("zone_id", waiterZoneId);
+        // Show tables that are either:
+        // 1. Ad-hoc tables in the waiter's zone (accessible to all zone waiters)
+        // 2. Tables assigned to this specific waiter
+        // 3. Unassigned tables in the waiter's zone
+        filteredTables = filteredTables.filter(table => {
+          const isInWaiterZone = table.zone_id === waiterZoneId;
+          const isAdhocInZone = isInWaiterZone && table.is_adhoc;
+          const isAssignedToWaiter = table.assigned_waiter_id === user.id;
+          const isUnassignedInZone = isInWaiterZone && !table.assigned_waiter_id;
+          
+          return isAdhocInZone || isAssignedToWaiter || isUnassignedInZone;
+        });
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setTables((data || []) as Table[]);
+      setTables(filteredTables as Table[]);
     } catch (error: any) {
       console.error("Error fetching tables:", error);
     }
