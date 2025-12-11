@@ -971,9 +971,8 @@ export default function Tables() {
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-xl">Table {table.table_number}</CardTitle>
                     {table.is_adhoc && (
-                      <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-600 border-purple-300">
-                        <UsersRound className="w-3 h-3 mr-1" />
-                        Ad-hoc
+                      <Badge variant="outline" className="px-1.5 bg-purple-500/10 text-purple-600 border-purple-300" title="Ad-hoc table">
+                        <UsersRound className="w-3 h-3" />
                       </Badge>
                     )}
                   </div>
