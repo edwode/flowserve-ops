@@ -968,14 +968,7 @@ export default function Tables() {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base">Table {table.table_number}</CardTitle>
-                    {table.is_adhoc && (
-                      <Badge variant="outline" className="px-1.5 bg-purple-500/10 text-purple-600 border-purple-300" title="Ad-hoc table">
-                        <UsersRound className="w-3 h-3" />
-                      </Badge>
-                    )}
-                  </div>
+                  <CardTitle className="text-base">Table {table.table_number}</CardTitle>
                   {table.zone && (
                     <div className="flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3 text-muted-foreground" />
@@ -984,6 +977,11 @@ export default function Tables() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {table.is_adhoc && (
+                    <Badge variant="outline" className="px-1.5 bg-purple-500/10 text-purple-600 border-purple-300" title="Ad-hoc table">
+                      <UsersRound className="w-3 h-3" />
+                    </Badge>
+                  )}
                   <Badge className={getStatusColor(table.status)}>
                     {getStatusLabel(table.status)}
                   </Badge>
