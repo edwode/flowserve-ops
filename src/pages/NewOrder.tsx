@@ -166,23 +166,15 @@ const NewOrder = () => {
 
       if (error) throw error;
 
-      // Filter tables based on waiter's zone and assignment
-      let filteredTables = data || [];
-      
-      if (waiterZoneId) {
-        // Show tables that are either:
-        // 1. Ad-hoc tables in the waiter's zone (accessible to all zone waiters)
-        // 2. Tables assigned to this specific waiter
-        // 3. Unassigned tables in the waiter's zone
-        filteredTables = filteredTables.filter(table => {
-          const isInWaiterZone = table.zone_id === waiterZoneId;
-          const isAdhocInZone = isInWaiterZone && table.is_adhoc;
-          const isAssignedToWaiter = table.assigned_waiter_id === user.id;
-          const isUnassignedInZone = isInWaiterZone && !table.assigned_waiter_id;
-          
-          return isAdhocInZone || isAssignedToWaiter || isUnassignedInZone;
-        });
-      }
+      // Filter tables to only show:
+      // 1. Tables directly assigned to this waiter
+      // 2. Ad-hoc tables in the waiter's zone (accessible to all zone waiters)
+      let filteredTables = (data || []).filter(table => {
+        const isAssignedToWaiter = table.assigned_waiter_id === user.id;
+        const isAdhocInWaiterZone = waiterZoneId && table.zone_id === waiterZoneId && table.is_adhoc;
+        
+        return isAssignedToWaiter || isAdhocInWaiterZone;
+      });
 
       setTables(filteredTables as Table[]);
     } catch (error: any) {
