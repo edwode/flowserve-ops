@@ -713,6 +713,7 @@ export type Database = {
           current_order_id: string | null
           event_id: string
           id: string
+          is_adhoc: boolean
           occupied_at: string | null
           status: string
           table_number: string
@@ -728,6 +729,7 @@ export type Database = {
           current_order_id?: string | null
           event_id: string
           id?: string
+          is_adhoc?: boolean
           occupied_at?: string | null
           status?: string
           table_number: string
@@ -743,6 +745,7 @@ export type Database = {
           current_order_id?: string | null
           event_id?: string
           id?: string
+          is_adhoc?: boolean
           occupied_at?: string | null
           status?: string
           table_number?: string
