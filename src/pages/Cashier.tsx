@@ -3,17 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight, Eye, EyeOff, Layers, CheckSquare, Square } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SplitPaymentDialog } from "@/components/SplitPaymentDialog";
+import { ConsolidatedOrderDialog } from "@/components/ConsolidatedOrderDialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +99,9 @@ const Cashier = () => {
   const [expandedPaymentTables, setExpandedPaymentTables] = useState<Set<string>>(new Set());
   const [expandedReturnTables, setExpandedReturnTables] = useState<Set<string>>(new Set());
   const [showPaidOrders, setShowPaidOrders] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [showConsolidatedDialog, setShowConsolidatedDialog] = useState(false);
 
   // Group orders by table for Payments tab
   const groupedOrders = useMemo(() => {
@@ -129,6 +134,53 @@ const Cashier = () => {
     });
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
   }, [returns]);
+
+  // Get selected orders for consolidation
+  const selectedOrders = useMemo(() => {
+    return orders.filter(order => selectedOrderIds.has(order.id));
+  }, [orders, selectedOrderIds]);
+
+  // Check if selected orders are from the same table
+  const canConsolidate = useMemo(() => {
+    if (selectedOrders.length < 2) return false;
+    const tables = new Set(selectedOrders.map(o => o.table_number));
+    const allUnpaid = selectedOrders.every(o => o.status !== 'paid');
+    return tables.size === 1 && allUnpaid;
+  }, [selectedOrders]);
+
+  const toggleOrderSelection = (orderId: string) => {
+    setSelectedOrderIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(orderId)) {
+        newSet.delete(orderId);
+      } else {
+        newSet.add(orderId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleTableSelection = (tableOrders: Order[]) => {
+    const unpaidOrders = tableOrders.filter(o => o.status !== 'paid');
+    const allSelected = unpaidOrders.every(o => selectedOrderIds.has(o.id));
+    
+    setSelectedOrderIds(prev => {
+      const newSet = new Set(prev);
+      if (allSelected) {
+        // Deselect all from this table
+        unpaidOrders.forEach(o => newSet.delete(o.id));
+      } else {
+        // Select all unpaid from this table
+        unpaidOrders.forEach(o => newSet.add(o.id));
+      }
+      return newSet;
+    });
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedOrderIds(new Set());
+  };
 
   const togglePaymentTable = (tableKey: string) => {
     setExpandedPaymentTables(prev => {
@@ -643,8 +695,49 @@ const Cashier = () => {
 
           {/* Payments Tab */}
           <TabsContent value="payments" className="space-y-3">
-            {/* Filter Toggle */}
-            <div className="flex justify-end">
+            {/* Action Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {selectionMode ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={exitSelectionMode}
+                    >
+                      Cancel
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {selectedOrderIds.size} selected
+                    </span>
+                    {canConsolidate && (
+                      <Button
+                        size="sm"
+                        onClick={() => setShowConsolidatedDialog(true)}
+                        className="gap-2"
+                      >
+                        <Layers className="h-4 w-4" />
+                        Consolidate ({selectedOrders.length})
+                      </Button>
+                    )}
+                    {selectedOrderIds.size >= 2 && !canConsolidate && (
+                      <span className="text-xs text-destructive">
+                        Select orders from same table only
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectionMode(true)}
+                    className="gap-2"
+                  >
+                    <Layers className="h-4 w-4" />
+                    Consolidate Orders
+                  </Button>
+                )}
+              </div>
               <Button
                 variant={showPaidOrders ? "secondary" : "outline"}
                 size="sm"
@@ -674,100 +767,148 @@ const Cashier = () => {
                 <p className="text-muted-foreground">No pending payments</p>
               </Card>
             ) : (
-              groupedOrders.map(([tableKey, tableOrders]) => (
-                <Collapsible
-                  key={tableKey}
-                  open={expandedPaymentTables.has(tableKey)}
-                  onOpenChange={() => togglePaymentTable(tableKey)}
-                >
-                  <Card className="overflow-hidden">
-                    <CollapsibleTrigger asChild>
-                      <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/5 transition-colors">
-                        <div className="flex items-center gap-3">
-                          {expandedPaymentTables.has(tableKey) ? (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          <div>
-                            <h3 className="font-semibold">Table {tableKey}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''} • 
-                              Total: {formatPrice(tableOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0))}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="secondary">
-                          {tableOrders.length}
-                        </Badge>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="border-t border-border divide-y divide-border">
-                        {tableOrders.map((order) => (
-                          <div
-                            key={order.id}
-                            className="p-4 hover:bg-accent/5 transition-colors cursor-pointer"
-                            onClick={() => setViewingOrder(order)}
-                          >
-                            <div className="space-y-3">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="font-semibold text-lg">
-                                    {order.order_number}
+              groupedOrders.map(([tableKey, tableOrders]) => {
+                const unpaidOrders = tableOrders.filter(o => o.status !== 'paid');
+                const allTableSelected = unpaidOrders.length > 0 && unpaidOrders.every(o => selectedOrderIds.has(o.id));
+                const someTableSelected = unpaidOrders.some(o => selectedOrderIds.has(o.id));
+                
+                return (
+                  <Collapsible
+                    key={tableKey}
+                    open={expandedPaymentTables.has(tableKey)}
+                    onOpenChange={() => togglePaymentTable(tableKey)}
+                  >
+                    <Card className="overflow-hidden">
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-accent/5 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {selectionMode && unpaidOrders.length > 0 && (
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleTableSelection(tableOrders);
+                                }}
+                                className="flex items-center"
+                              >
+                                {allTableSelected ? (
+                                  <CheckSquare className="h-5 w-5 text-primary" />
+                                ) : someTableSelected ? (
+                                  <div className="h-5 w-5 border-2 border-primary rounded flex items-center justify-center">
+                                    <div className="h-2 w-2 bg-primary rounded-sm" />
                                   </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {order.guest_name && `${order.guest_name}`}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    Waiter: {order.profiles?.full_name || 'Unknown'}
-                                  </div>
-                                </div>
-                                <Badge className={getStatusColor(order.status)}>
-                                  {order.status}
-                                </Badge>
+                                ) : (
+                                  <Square className="h-5 w-5 text-muted-foreground" />
+                                )}
                               </div>
-
-                              <div className="flex items-center justify-between border-t border-border pt-3">
-                                <div>
-                                  <div className="text-2xl font-bold">
-                                    {formatPrice(order.total_amount)}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {order.served_at 
-                                      ? `Served: ${new Date(order.served_at).toLocaleTimeString()}`
-                                      : `Ordered: ${new Date(order.created_at).toLocaleTimeString()}`
-                                    }
-                                  </div>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSplitPaymentOrder(order);
-                                    }}
-                                  >
-                                    <Split className="mr-2 h-4 w-4" />
-                                    Split Bill
-                                  </Button>
-                                  <Button onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenPayment(order);
-                                  }}>
-                                    <DollarSign className="mr-2 h-4 w-4" />
-                                    Full Payment
-                                  </Button>
-                                </div>
-                              </div>
+                            )}
+                            {expandedPaymentTables.has(tableKey) ? (
+                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <div>
+                              <h3 className="font-semibold">Table {tableKey}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''} • 
+                                Total: {formatPrice(tableOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0))}
+                              </p>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </Card>
-                </Collapsible>
-              ))
+                          <Badge variant="secondary">
+                            {tableOrders.length}
+                          </Badge>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="border-t border-border divide-y divide-border">
+                          {tableOrders.map((order) => {
+                            const isSelected = selectedOrderIds.has(order.id);
+                            const isPaid = order.status === 'paid';
+                            
+                            return (
+                              <div
+                                key={order.id}
+                                className={`p-4 hover:bg-accent/5 transition-colors cursor-pointer ${isSelected ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                                onClick={() => {
+                                  if (selectionMode && !isPaid) {
+                                    toggleOrderSelection(order.id);
+                                  } else {
+                                    setViewingOrder(order);
+                                  }
+                                }}
+                              >
+                                <div className="space-y-3">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex items-start gap-3">
+                                      {selectionMode && !isPaid && (
+                                        <Checkbox
+                                          checked={isSelected}
+                                          onCheckedChange={() => toggleOrderSelection(order.id)}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="mt-1"
+                                        />
+                                      )}
+                                      <div>
+                                        <div className="font-semibold text-lg">
+                                          {order.order_number}
+                                        </div>
+                                        <div className="text-sm text-muted-foreground">
+                                          {order.guest_name && `${order.guest_name}`}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          Waiter: {order.profiles?.full_name || 'Unknown'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <Badge className={getStatusColor(order.status)}>
+                                      {order.status}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="flex items-center justify-between border-t border-border pt-3">
+                                    <div>
+                                      <div className="text-2xl font-bold">
+                                        {formatPrice(order.total_amount)}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {order.served_at 
+                                          ? `Served: ${new Date(order.served_at).toLocaleTimeString()}`
+                                          : `Ordered: ${new Date(order.created_at).toLocaleTimeString()}`
+                                        }
+                                      </div>
+                                    </div>
+                                    {!selectionMode && !isPaid && (
+                                      <div className="flex gap-2">
+                                        <Button
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSplitPaymentOrder(order);
+                                          }}
+                                        >
+                                          <Split className="mr-2 h-4 w-4" />
+                                          Split Bill
+                                        </Button>
+                                        <Button onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenPayment(order);
+                                        }}>
+                                          <DollarSign className="mr-2 h-4 w-4" />
+                                          Full Payment
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    </Card>
+                  </Collapsible>
+                );
+              })
             )}
           </TabsContent>
 
@@ -1072,6 +1213,23 @@ const Cashier = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Consolidated Order Dialog */}
+      {user && tenantId && (
+        <ConsolidatedOrderDialog
+          orders={selectedOrders}
+          open={showConsolidatedDialog}
+          onClose={() => {
+            setShowConsolidatedDialog(false);
+          }}
+          onPaymentComplete={() => {
+            fetchOrders();
+            exitSelectionMode();
+          }}
+          userId={user.id}
+          tenantId={tenantId}
+        />
+      )}
     </div>
   );
 };
