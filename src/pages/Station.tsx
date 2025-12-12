@@ -52,12 +52,10 @@ interface OrderReturn {
   order_item_id: string;
   order_items: {
     quantity: number;
-    order_id: string;
     menu_items: {
       name: string;
     };
     orders: {
-      id: string;
       order_number: string;
       table_number: string;
     };
@@ -260,9 +258,8 @@ const Station = () => {
           order_items!inner (
             station_type,
             quantity,
-            order_id,
             menu_items (name),
-            orders (id, order_number, table_number)
+            orders (order_number, table_number)
           )
         `)
         .eq('order_items.station_type', type)
@@ -353,13 +350,6 @@ const Station = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Find the return to get the order_id
-      const returnItem = returns.find(r => r.id === returnId);
-      if (!returnItem) throw new Error("Return not found");
-
-      const orderId = returnItem.order_items.order_id;
-
-      // Update order_return confirmed_at
       const { error } = await supabase
         .from('order_returns')
         .update({
@@ -370,17 +360,9 @@ const Station = () => {
 
       if (error) throw error;
 
-      // Update the order status to 'returned'
-      const { error: orderError } = await supabase
-        .from('orders')
-        .update({ status: 'returned' })
-        .eq('id', orderId);
-
-      if (orderError) throw orderError;
-
       toast({
         title: "Return confirmed",
-        description: "Order status updated and cashier has been notified",
+        description: "Cashier has been notified",
       });
 
       fetchReturns();
