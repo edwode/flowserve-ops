@@ -46,6 +46,7 @@ interface MenuItem {
   starting_inventory: number | null;
   current_inventory: number | null;
   event_id: string | null;
+  has_orders?: boolean;
 }
 
 interface Event {
@@ -164,7 +165,26 @@ export function AdminMenu() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setMenuItems(data || []);
+      
+      // Check which items have orders
+      if (data && data.length > 0) {
+        const itemIds = data.map(item => item.id);
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select('menu_item_id')
+          .in('menu_item_id', itemIds);
+        
+        const itemsWithOrders = new Set(orderItems?.map(oi => oi.menu_item_id) || []);
+        
+        const itemsWithOrderFlag = data.map(item => ({
+          ...item,
+          has_orders: itemsWithOrders.has(item.id)
+        }));
+        
+        setMenuItems(itemsWithOrderFlag);
+      } else {
+        setMenuItems([]);
+      }
     } catch (error: any) {
       toast({
         title: "Error loading menu items",
@@ -582,11 +602,27 @@ export function AdminMenu() {
                           >
                             <Eye className="h-3 w-3" />
                           </Button>
+                        ) : item.has_orders ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setItemToDelete(item);
+                              setRetireItemDialogOpen(true);
+                            }}
+                            title="Retire item (has associated orders)"
+                          >
+                            <Archive className="h-3 w-3 text-muted-foreground" />
+                          </Button>
                         ) : (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleDeleteOrRetire(item)}
+                            onClick={() => {
+                              setItemToDelete(item);
+                              setDeleteItemDialogOpen(true);
+                            }}
+                            title="Delete item"
                           >
                             <Trash2 className="h-3 w-3 text-destructive" />
                           </Button>
