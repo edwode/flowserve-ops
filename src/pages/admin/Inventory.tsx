@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { PackageSearch, TrendingDown, History, AlertTriangle } from "lucide-react";
+import { PackageSearch, TrendingDown, History, AlertTriangle, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface MenuItem {
   id: string;
@@ -56,6 +57,7 @@ export default function AdminInventory() {
   const [adjustmentReason, setAdjustmentReason] = useState("");
   const [adjustmentHistory, setAdjustmentHistory] = useState<InventoryAdjustment[]>([]);
   const [usageAnalytics, setUsageAnalytics] = useState<UsageAnalytics[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchEvents();
@@ -71,6 +73,7 @@ export default function AdminInventory() {
   }, [selectedEvent]);
 
   const fetchEvents = async () => {
+    setIsLoading(true);
     const { data, error } = await supabase
       .from("events")
       .select("id, name, event_date")
@@ -79,6 +82,7 @@ export default function AdminInventory() {
 
     if (error) {
       toast.error("Failed to load events");
+      setIsLoading(false);
       return;
     }
 
@@ -86,6 +90,7 @@ export default function AdminInventory() {
     if (data && data.length > 0) {
       setSelectedEvent(data[0].id);
     }
+    setIsLoading(false);
   };
 
   const fetchMenuItems = async () => {
@@ -262,13 +267,53 @@ export default function AdminInventory() {
   const outOfStockItems = getOutOfStockItems();
   const reorderSuggestions = getReorderSuggestions();
 
-  return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Inventory Management</h1>
           <p className="text-muted-foreground">Track stock levels, adjustments, and usage analytics</p>
         </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <PackageSearch className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium">No Active Events</p>
+            <p className="text-muted-foreground text-center max-w-md">
+              Create an active event first to manage inventory. Menu items are associated with specific events.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Inventory Management</h1>
+          <p className="text-muted-foreground">Track stock levels, adjustments, and usage analytics</p>
+        </div>
+        <Select value={selectedEvent} onValueChange={setSelectedEvent}>
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="Select event" />
+          </SelectTrigger>
+          <SelectContent>
+            {events.map((event) => (
+              <SelectItem key={event.id} value={event.id}>
+                {event.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
