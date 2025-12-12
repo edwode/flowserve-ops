@@ -447,7 +447,7 @@ const NewOrder = () => {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="guest">Guest Name (Optional)</Label>
+              <Label htmlFor="guest">Notes (Optional)</Label>
               <Input
                 id="guest"
                 value={guestName}
