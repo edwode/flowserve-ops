@@ -47,6 +47,7 @@ interface Order {
   ready_at: string | null;
   served_at: string | null;
   paid_at: string | null;
+  reservation_name?: string | null;
 }
 
 interface Payment {
@@ -116,7 +117,29 @@ const OrderDetails = () => {
         .single();
 
       if (orderError) throw orderError;
-      setOrder(orderData);
+
+      // Fetch reservation name from table if table_number exists
+      let reservationName: string | null = null;
+      if (orderData?.table_number) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('tenant_id')
+          .eq('id', (await supabase.auth.getUser()).data.user?.id)
+          .single();
+
+        if (profile?.tenant_id) {
+          const { data: tableData } = await supabase
+            .from('tables')
+            .select('reservation_name')
+            .eq('tenant_id', profile.tenant_id)
+            .eq('table_number', orderData.table_number)
+            .maybeSingle();
+
+          reservationName = tableData?.reservation_name || null;
+        }
+      }
+
+      setOrder({ ...orderData, reservation_name: reservationName });
 
       // Fetch order items
       const { data: itemsData, error: itemsError } = await supabase
@@ -344,6 +367,7 @@ const OrderDetails = () => {
             <h1 className="text-xl font-bold">{order.order_number}</h1>
             <p className="text-sm text-muted-foreground">
               Table {order.table_number}
+              {order.reservation_name && ` • ${order.reservation_name}`}
               {order.guest_name && ` • ${order.guest_name}`}
             </p>
           </div>
