@@ -58,6 +58,7 @@ interface Table {
   cleared_at: string | null;
   zone_id: string | null;
   is_adhoc: boolean;
+  reservation_name: string | null;
   zone?: Zone | null;
   order?: {
     order_number: string;
@@ -93,6 +94,7 @@ export default function Tables() {
   const [editTableCapacity, setEditTableCapacity] = useState("");
   const [editTableZone, setEditTableZone] = useState("");
   const [editTableIsAdhoc, setEditTableIsAdhoc] = useState(false);
+  const [editTableReservationName, setEditTableReservationName] = useState("");
   const [editTableOpen, setEditTableOpen] = useState(false);
   
   // Delete Table state
@@ -412,6 +414,7 @@ export default function Tables() {
     setEditTableCapacity(String(table.capacity));
     setEditTableZone(table.zone_id || "none");
     setEditTableIsAdhoc(table.is_adhoc);
+    setEditTableReservationName(table.reservation_name || "");
     setEditTableOpen(true);
   };
 
@@ -425,6 +428,7 @@ export default function Tables() {
         capacity: parseInt(editTableCapacity) || 4,
         zone_id: editTableZone && editTableZone !== "none" ? editTableZone : null,
         is_adhoc: editTableIsAdhoc,
+        reservation_name: editTableReservationName.trim() || null,
       })
       .eq("id", editingTable.id);
 
@@ -833,6 +837,15 @@ export default function Tables() {
             <p className="text-xs text-muted-foreground -mt-2">
               Ad-hoc tables can be accessed by all waiters assigned to this zone
             </p>
+            <div>
+              <Label htmlFor="edit-reservation-name">Reservation Name (Optional)</Label>
+              <Input
+                id="edit-reservation-name"
+                value={editTableReservationName}
+                onChange={(e) => setEditTableReservationName(e.target.value)}
+                placeholder="Enter reservation name"
+              />
+            </div>
             <Button onClick={updateTable} className="w-full">
               Save Changes
             </Button>
