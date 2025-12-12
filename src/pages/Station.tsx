@@ -345,12 +345,13 @@ const Station = () => {
     }
   };
 
-  const handleConfirmReturn = async (returnId: string) => {
+  const handleConfirmReturn = async (returnId: string, orderItemId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase
+      // Update the order_returns record
+      const { error: returnError } = await supabase
         .from('order_returns')
         .update({
           confirmed_at: new Date().toISOString(),
@@ -358,14 +359,25 @@ const Station = () => {
         })
         .eq('id', returnId);
 
-      if (error) throw error;
+      if (returnError) throw returnError;
+
+      // Update the order_item status to 'returned'
+      const { error: itemError } = await supabase
+        .from('order_items')
+        .update({
+          status: 'returned',
+        })
+        .eq('id', orderItemId);
+
+      if (itemError) throw itemError;
 
       toast({
         title: "Return confirmed",
-        description: "Cashier has been notified",
+        description: "Item has been removed and cashier has been notified",
       });
 
       fetchReturns();
+      fetchOrderItems();
     } catch (error: any) {
       toast({
         title: "Error confirming return",
@@ -460,7 +472,7 @@ const Station = () => {
                   <Button
                     className="w-full"
                     variant="outline"
-                    onClick={() => handleConfirmReturn(returnItem.id)}
+                    onClick={() => handleConfirmReturn(returnItem.id, returnItem.order_item_id)}
                   >
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Confirm Return
