@@ -1228,17 +1228,14 @@ const Cashier = () => {
                                     returnItem.order_items.price * returnItem.order_items.quantity
                                   )}
                                 </div>
-                                {!returnItem.refund_amount && (
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => handleConfirmRevenueLoss(returnItem)}
-                                  >
-                                    Confirm Revenue Loss
-                                  </Button>
-                                )}
-                                {returnItem.refund_amount && (
-                                  <Badge variant="secondary">Confirmed</Badge>
-                                )}
+                                <Button
+                                  variant="outline"
+                                  onClick={() => !returnItem.refund_amount && handleConfirmRevenueLoss(returnItem)}
+                                  disabled={!!returnItem.refund_amount}
+                                  className={returnItem.refund_amount ? "opacity-50 cursor-not-allowed" : ""}
+                                >
+                                  {returnItem.refund_amount ? "Loss Confirmed" : "Confirm Revenue Loss"}
+                                </Button>
                               </div>
                             </div>
                           </div>
