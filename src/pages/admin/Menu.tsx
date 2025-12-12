@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Settings, Trash2 } from "lucide-react";
+import { Plus, Edit, Settings, Trash2, Archive, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { useTenantCurrency } from "@/hooks/useTenantCurrency";
@@ -42,6 +42,7 @@ interface MenuItem {
   price: number;
   station_type: string;
   is_available: boolean;
+  is_retired: boolean;
   starting_inventory: number | null;
   current_inventory: number | null;
   event_id: string | null;
@@ -66,6 +67,7 @@ export function AdminMenu() {
   const [events, setEvents] = useState<Event[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("all");
+  const [showRetired, setShowRetired] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [formData, setFormData] = useState({
@@ -88,6 +90,12 @@ export function AdminMenu() {
   const [deleteCategoryDialogOpen, setDeleteCategoryDialogOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<MenuCategory | null>(null);
 
+  // Delete/Retire menu item state
+  const [deleteItemDialogOpen, setDeleteItemDialogOpen] = useState(false);
+  const [retireItemDialogOpen, setRetireItemDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
+  const [itemHasOrders, setItemHasOrders] = useState(false);
+
   useEffect(() => {
     fetchEvents();
     fetchMenuItems();
@@ -96,7 +104,7 @@ export function AdminMenu() {
 
   useEffect(() => {
     fetchMenuItems();
-  }, [selectedEvent]);
+  }, [selectedEvent, showRetired]);
 
   const fetchEvents = async () => {
     try {
@@ -146,6 +154,13 @@ export function AdminMenu() {
         query = query.eq('event_id', selectedEvent);
       }
 
+      // Filter by retired status
+      if (!showRetired) {
+        query = query.eq('is_retired', false);
+      } else {
+        query = query.eq('is_retired', true);
+      }
+
       const { data, error } = await query;
 
       if (error) throw error;
@@ -153,6 +168,93 @@ export function AdminMenu() {
     } catch (error: any) {
       toast({
         title: "Error loading menu items",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const checkItemHasOrders = async (itemId: string): Promise<boolean> => {
+    const { count, error } = await supabase
+      .from('order_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('menu_item_id', itemId);
+
+    if (error) return true; // Assume has orders on error to be safe
+    return (count || 0) > 0;
+  };
+
+  const handleDeleteOrRetire = async (item: MenuItem) => {
+    const hasOrders = await checkItemHasOrders(item.id);
+    setItemToDelete(item);
+    setItemHasOrders(hasOrders);
+    
+    if (hasOrders) {
+      setRetireItemDialogOpen(true);
+    } else {
+      setDeleteItemDialogOpen(true);
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .delete()
+        .eq('id', itemToDelete.id);
+
+      if (error) throw error;
+      toast({ title: "Menu item deleted successfully" });
+      setDeleteItemDialogOpen(false);
+      setItemToDelete(null);
+      await fetchMenuItems();
+    } catch (error: any) {
+      toast({
+        title: "Error deleting menu item",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRetireItem = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_retired: true, is_available: false })
+        .eq('id', itemToDelete.id);
+
+      if (error) throw error;
+      toast({ title: "Menu item retired successfully" });
+      setRetireItemDialogOpen(false);
+      setItemToDelete(null);
+      await fetchMenuItems();
+    } catch (error: any) {
+      toast({
+        title: "Error retiring menu item",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRestoreItem = async (item: MenuItem) => {
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_retired: false })
+        .eq('id', item.id);
+
+      if (error) throw error;
+      toast({ title: "Menu item restored successfully" });
+      await fetchMenuItems();
+    } catch (error: any) {
+      toast({
+        title: "Error restoring menu item",
         description: error.message,
         variant: "destructive",
       });
@@ -397,6 +499,13 @@ export function AdminMenu() {
           <p className="text-muted-foreground">Manage menu items and inventory</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant={showRetired ? "default" : "outline"} 
+            onClick={() => setShowRetired(!showRetired)}
+          >
+            {showRetired ? <Eye className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}
+            {showRetired ? "Viewing Retired" : "Show Retired"}
+          </Button>
           <Button variant="outline" onClick={() => handleOpenCategoryDialog()}>
             <Settings className="mr-2 h-4 w-4" />
             Manage Categories
@@ -433,9 +542,16 @@ export function AdminMenu() {
                             {formatPrice(item.price)}
                           </div>
                         </div>
-                        <Badge variant={item.is_available ? "default" : "secondary"}>
-                          {item.is_available ? "Available" : "Unavailable"}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          {item.is_retired && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              Retired
+                            </Badge>
+                          )}
+                          <Badge variant={item.is_available ? "default" : "secondary"}>
+                            {item.is_available ? "Available" : "Unavailable"}
+                          </Badge>
+                        </div>
                       </div>
 
                       <div className="text-xs text-muted-foreground">
@@ -448,15 +564,34 @@ export function AdminMenu() {
                         </div>
                       )}
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleOpenDialog(item)}
-                      >
-                        <Edit className="mr-2 h-3 w-3" />
-                        Edit
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleOpenDialog(item)}
+                        >
+                          <Edit className="mr-2 h-3 w-3" />
+                          Edit
+                        </Button>
+                        {showRetired ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRestoreItem(item)}
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteOrRetire(item)}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </Card>
                 ))}
@@ -722,6 +857,42 @@ export function AdminMenu() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteCategory}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Menu Item Confirmation */}
+      <AlertDialog open={deleteItemDialogOpen} onOpenChange={setDeleteItemDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Menu Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{itemToDelete?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteItem}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Retire Menu Item Confirmation */}
+      <AlertDialog open={retireItemDialogOpen} onOpenChange={setRetireItemDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retire Menu Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{itemToDelete?.name}" has associated orders and cannot be deleted. Would you like to retire it instead?
+              Retired items are hidden from the menu but preserved for historical records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRetireItem}>
+              <Archive className="mr-2 h-4 w-4" />
+              Retire Item
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

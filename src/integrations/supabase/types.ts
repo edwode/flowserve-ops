@@ -165,6 +165,7 @@ export type Database = {
           event_id: string | null
           id: string
           is_available: boolean | null
+          is_retired: boolean
           name: string
           price: number
           starting_inventory: number | null
@@ -181,6 +182,7 @@ export type Database = {
           event_id?: string | null
           id?: string
           is_available?: boolean | null
+          is_retired?: boolean
           name: string
           price?: number
           starting_inventory?: number | null
@@ -197,6 +199,7 @@ export type Database = {
           event_id?: string | null
           id?: string
           is_available?: boolean | null
+          is_retired?: boolean
           name?: string
           price?: number
           starting_inventory?: number | null
