@@ -589,27 +589,27 @@ const Cashier = () => {
     }
   };
 
-  const handleApproveRefund = async (returnItem: OrderReturn) => {
+  const handleConfirmRevenueLoss = async (returnItem: OrderReturn) => {
     try {
-      const refundAmount = returnItem.refund_amount || 
+      const lossAmount = returnItem.refund_amount || 
         (returnItem.order_items.price * returnItem.order_items.quantity);
 
       const { error } = await supabase
         .from('order_returns')
-        .update({ refund_amount: refundAmount })
+        .update({ refund_amount: lossAmount })
         .eq('id', returnItem.id);
 
       if (error) throw error;
 
       toast({
-        title: "Refund approved",
-        description: `${formatPrice(refundAmount)} will be refunded`,
+        title: "Revenue loss confirmed",
+        description: `${formatPrice(lossAmount)} recorded as lost revenue`,
       });
 
       fetchReturns();
     } catch (error: any) {
       toast({
-        title: "Error approving refund",
+        title: "Error confirming revenue loss",
         description: error.message,
         variant: "destructive",
       });
@@ -1224,20 +1224,20 @@ const Cashier = () => {
 
                               <div className="flex items-center justify-between border-t border-border pt-3">
                                 <div className="text-lg font-bold">
-                                  Refund: {formatPrice(returnItem.refund_amount || 
+                                  Loss: {formatPrice(returnItem.refund_amount || 
                                     returnItem.order_items.price * returnItem.order_items.quantity
                                   )}
                                 </div>
                                 {!returnItem.refund_amount && (
                                   <Button
                                     variant="outline"
-                                    onClick={() => handleApproveRefund(returnItem)}
+                                    onClick={() => handleConfirmRevenueLoss(returnItem)}
                                   >
-                                    Approve Refund
+                                    Confirm Revenue Loss
                                   </Button>
                                 )}
                                 {returnItem.refund_amount && (
-                                  <Badge variant="secondary">Approved</Badge>
+                                  <Badge variant="secondary">Confirmed</Badge>
                                 )}
                               </div>
                             </div>
