@@ -48,6 +48,7 @@ interface Order {
     id: string;
     quantity: number;
     price: number;
+    status?: string;
     menu_item: {
       name: string;
     };
@@ -323,6 +324,7 @@ const Cashier = () => {
             id,
             quantity,
             price,
+            status,
             menu_items (name)
           )
         `)
@@ -331,13 +333,15 @@ const Cashier = () => {
 
       if (error) throw error;
       
-      // Transform the data to match our Order interface
+      // Transform the data to match our Order interface and filter out returned items
       const transformedData = (data || []).map(order => ({
         ...order,
-        order_items: order.order_items?.map(item => ({
-          ...item,
-          menu_item: item.menu_items
-        }))
+        order_items: order.order_items
+          ?.filter(item => item.status !== 'returned')
+          .map(item => ({
+            ...item,
+            menu_item: item.menu_items
+          }))
       }));
       
       setOrders(transformedData);
@@ -405,6 +409,7 @@ const Cashier = () => {
               id,
               quantity,
               price,
+              status,
               menu_items (name)
             )
           )
@@ -444,12 +449,14 @@ const Cashier = () => {
             order_number: payment.orders.order_number,
             total_amount: payment.orders.total_amount,
             guest_name: payment.orders.guest_name,
-            order_items: payment.orders.order_items?.map((item: any) => ({
-              id: item.id,
-              quantity: item.quantity,
-              price: item.price,
-              menu_item: item.menu_items,
-            })),
+            order_items: payment.orders.order_items
+              ?.filter((item: any) => item.status !== 'returned')
+              .map((item: any) => ({
+                id: item.id,
+                quantity: item.quantity,
+                price: item.price,
+                menu_item: item.menu_items,
+              })),
           });
           groups[groupKey].totalAmount += payment.orders.total_amount || 0;
         }
