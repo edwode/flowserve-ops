@@ -715,6 +715,7 @@ export type Database = {
           id: string
           is_adhoc: boolean
           occupied_at: string | null
+          reservation_name: string | null
           status: string
           table_number: string
           tenant_id: string
@@ -731,6 +732,7 @@ export type Database = {
           id?: string
           is_adhoc?: boolean
           occupied_at?: string | null
+          reservation_name?: string | null
           status?: string
           table_number: string
           tenant_id: string
@@ -747,6 +749,7 @@ export type Database = {
           id?: string
           is_adhoc?: boolean
           occupied_at?: string | null
+          reservation_name?: string | null
           status?: string
           table_number?: string
           tenant_id?: string
