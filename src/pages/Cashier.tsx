@@ -334,15 +334,29 @@ const Cashier = () => {
       if (error) throw error;
       
       // Transform the data to match our Order interface and filter out returned items
-      const transformedData = (data || []).map(order => ({
-        ...order,
-        order_items: order.order_items
-          ?.filter(item => item.status !== 'returned')
-          .map(item => ({
-            ...item,
-            menu_item: item.menu_items
-          }))
-      }));
+      const transformedData = (data || [])
+        .map(order => {
+          const nonReturnedItems = order.order_items
+            ?.filter(item => item.status !== 'returned')
+            .map(item => ({
+              ...item,
+              menu_item: item.menu_items
+            }));
+          
+          // Recalculate total based on non-returned items
+          const recalculatedTotal = nonReturnedItems?.reduce(
+            (sum, item) => sum + (item.price * item.quantity), 
+            0
+          ) || 0;
+          
+          return {
+            ...order,
+            order_items: nonReturnedItems,
+            total_amount: recalculatedTotal
+          };
+        })
+        // Remove orders where all items have been returned
+        .filter(order => order.order_items && order.order_items.length > 0);
       
       setOrders(transformedData);
     } catch (error: any) {
