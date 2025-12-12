@@ -606,7 +606,7 @@ const Cashier = () => {
         description: `${formatPrice(lossAmount)} recorded as lost revenue`,
       });
 
-      fetchReturns();
+      await fetchReturns();
     } catch (error: any) {
       toast({
         title: "Error confirming revenue loss",
