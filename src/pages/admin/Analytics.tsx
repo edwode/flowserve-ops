@@ -49,12 +49,19 @@ interface RevenueLossData {
   byDate: { date: string; amount: number; count: number }[];
 }
 
+interface EventOption {
+  id: string;
+  name: string;
+}
+
 export default function Analytics() {
   const { toast } = useToast();
   const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState("7");
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [events, setEvents] = useState<EventOption[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string>("all");
 
   const [peakHours, setPeakHours] = useState<any[]>([]);
   const [popularItems, setPopularItems] = useState<any[]>([]);
@@ -77,9 +84,34 @@ export default function Analytics() {
 
   useEffect(() => {
     if (tenantId) {
-      fetchAllAnalytics();
+      fetchEventsInRange();
     }
   }, [tenantId, dateRange]);
+
+  useEffect(() => {
+    if (tenantId) {
+      fetchAllAnalytics();
+    }
+  }, [tenantId, dateRange, selectedEventId]);
+
+  const fetchEventsInRange = async () => {
+    const { start, end } = getDateRange();
+    const { data, error } = await supabase
+      .from("events")
+      .select("id, name")
+      .eq("tenant_id", tenantId)
+      .gte("event_date", start)
+      .lte("event_date", end)
+      .order("event_date", { ascending: false });
+
+    if (!error && data) {
+      setEvents(data);
+      // Reset to "all" if current selection is not in the new list
+      if (selectedEventId !== "all" && !data.find(e => e.id === selectedEventId)) {
+        setSelectedEventId("all");
+      }
+    }
+  };
 
   const fetchTenantId = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -133,7 +165,7 @@ export default function Analytics() {
 
   const fetchRevenueLoss = async (start: string, end: string) => {
     // Fetch returns with order items and menu items for category info
-    const { data: returns, error } = await supabase
+    let query = supabase
       .from("order_returns")
       .select(`
         id,
@@ -143,6 +175,7 @@ export default function Analytics() {
         order_items (
           price,
           quantity,
+          order_id,
           menu_items (
             category
           )
@@ -152,7 +185,24 @@ export default function Analytics() {
       .gte("created_at", start)
       .lte("created_at", end);
 
+    const { data: returns, error } = await query;
+
     if (error || !returns) return;
+
+    // If event filter is applied, get order IDs for that event
+    let eventOrderIds: Set<string> | null = null;
+    if (selectedEventId !== "all") {
+      const { data: eventOrders } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("event_id", selectedEventId);
+      eventOrderIds = new Set(eventOrders?.map(o => o.id) || []);
+    }
+
+    // Filter returns by event if needed
+    const filteredReturns = eventOrderIds
+      ? returns.filter((ret: any) => eventOrderIds!.has(ret.order_items?.order_id))
+      : returns;
 
     let totalLoss = 0;
     let confirmedLoss = 0;
@@ -160,7 +210,7 @@ export default function Analytics() {
     const reasonMap = new Map<string, { count: number; amount: number }>();
     const dateMap = new Map<string, { amount: number; count: number }>();
 
-    returns.forEach((ret: any) => {
+    filteredReturns.forEach((ret: any) => {
       const itemPrice = ret.order_items?.price || 0;
       const quantity = ret.order_items?.quantity || 1;
       const calculatedAmount = itemPrice * quantity;
@@ -209,93 +259,321 @@ export default function Analytics() {
   };
 
   const fetchPeakHours = async (start: string, end: string) => {
-    const { data, error } = await supabase.rpc("get_peak_hours_analysis", {
-      _start_date: start,
-      _end_date: end,
-      _tenant_id: tenantId,
-    });
+    // Build query for orders with optional event filter
+    let query = supabase
+      .from("orders")
+      .select("id, created_at, total_amount")
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("created_at", start)
+      .lte("created_at", end);
 
-    if (!error && data) {
+    if (selectedEventId !== "all") {
+      query = query.eq("event_id", selectedEventId);
+    }
+
+    const { data: orders, error } = await query;
+
+    if (!error && orders) {
+      // Group by hour
+      const hourMap = new Map<number, { orders: number; revenue: number }>();
+      orders.forEach((order: any) => {
+        const hour = new Date(order.created_at).getHours();
+        const existing = hourMap.get(hour) || { orders: 0, revenue: 0 };
+        hourMap.set(hour, {
+          orders: existing.orders + 1,
+          revenue: existing.revenue + parseFloat(order.total_amount || 0),
+        });
+      });
+
       setPeakHours(
-        data.map((item: any) => ({
-          hour: `${item.hour}:00`,
-          orders: parseInt(item.order_count),
-          revenue: parseFloat(item.total_revenue || 0),
-        }))
+        Array.from(hourMap.entries())
+          .map(([hour, data]) => ({
+            hour: `${hour}:00`,
+            orders: data.orders,
+            revenue: data.revenue,
+          }))
+          .sort((a, b) => parseInt(a.hour) - parseInt(b.hour))
       );
     }
   };
 
   const fetchPopularItems = async (start: string, end: string) => {
-    const { data, error } = await supabase.rpc("get_popular_items", {
-      _start_date: start,
-      _end_date: end,
-      _tenant_id: tenantId,
-      _limit: 10,
-    });
+    // Get orders with optional event filter
+    let ordersQuery = supabase
+      .from("orders")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("created_at", start)
+      .lte("created_at", end);
 
-    if (!error && data) {
-      setPopularItems(data);
+    if (selectedEventId !== "all") {
+      ordersQuery = ordersQuery.eq("event_id", selectedEventId);
+    }
+
+    const { data: orders } = await ordersQuery;
+    if (!orders || orders.length === 0) {
+      setPopularItems([]);
+      return;
+    }
+
+    const orderIds = orders.map(o => o.id);
+
+    // Get order items for those orders
+    const { data: orderItems, error } = await supabase
+      .from("order_items")
+      .select(`
+        menu_item_id,
+        quantity,
+        price,
+        order_id,
+        menu_items (
+          name,
+          category
+        )
+      `)
+      .in("order_id", orderIds);
+
+    if (!error && orderItems) {
+      const itemMap = new Map<string, any>();
+      orderItems.forEach((item: any) => {
+        const existing = itemMap.get(item.menu_item_id) || {
+          item_id: item.menu_item_id,
+          item_name: item.menu_items?.name || "Unknown",
+          category: item.menu_items?.category || "Unknown",
+          total_quantity: 0,
+          total_revenue: 0,
+          order_count: new Set(),
+        };
+        existing.total_quantity += item.quantity;
+        existing.total_revenue += item.price * item.quantity;
+        existing.order_count.add(item.order_id);
+        itemMap.set(item.menu_item_id, existing);
+      });
+
+      setPopularItems(
+        Array.from(itemMap.values())
+          .map(item => ({
+            ...item,
+            order_count: item.order_count.size,
+            avg_price: item.total_revenue / item.total_quantity,
+          }))
+          .sort((a, b) => b.total_quantity - a.total_quantity)
+          .slice(0, 10)
+      );
     }
   };
 
   const fetchStationEfficiency = async (start: string, end: string) => {
-    const { data, error } = await supabase.rpc("get_station_efficiency", {
-      _start_date: start,
-      _end_date: end,
-      _tenant_id: tenantId,
-    });
+    // Get orders with optional event filter
+    let ordersQuery = supabase
+      .from("orders")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .gte("created_at", start)
+      .lte("created_at", end);
 
-    if (!error && data) {
-      setStationEfficiency(data);
+    if (selectedEventId !== "all") {
+      ordersQuery = ordersQuery.eq("event_id", selectedEventId);
     }
-  };
 
-  const fetchWaiterPerformance = async (start: string, end: string) => {
-    const { data, error } = await supabase.rpc("get_waiter_performance", {
-      _start_date: start,
-      _end_date: end,
-      _tenant_id: tenantId,
-    });
-
-    if (!error && data) {
-      setWaiterPerformance(data);
+    const { data: orders } = await ordersQuery;
+    if (!orders || orders.length === 0) {
+      setStationEfficiency([]);
+      return;
     }
-  };
 
-  const fetchRevenueTrends = async (start: string, end: string) => {
-    const { data, error } = await supabase.rpc("get_revenue_trends", {
-      _start_date: start,
-      _end_date: end,
-      _tenant_id: tenantId,
-    });
+    const orderIds = orders.map(o => o.id);
 
-    if (!error && data) {
-      setRevenueTrends(
-        data.map((item: any) => ({
-          date: new Date(item.date).toLocaleDateString(),
-          revenue: parseFloat(item.total_revenue || 0),
-          orders: parseInt(item.total_orders),
-          avgOrder: parseFloat(item.avg_order_value || 0),
+    // Get order items with ready_at for those orders
+    const { data: orderItems, error } = await supabase
+      .from("order_items")
+      .select("station_type, created_at, ready_at")
+      .in("order_id", orderIds)
+      .not("ready_at", "is", null);
+
+    if (!error && orderItems) {
+      const stationMap = new Map<string, any>();
+      orderItems.forEach((item: any) => {
+        const prepTime = (new Date(item.ready_at).getTime() - new Date(item.created_at).getTime()) / 60000; // minutes
+        const existing = stationMap.get(item.station_type) || {
+          station_type: item.station_type,
+          total_items: 0,
+          total_prep_time: 0,
+          items_on_time: 0,
+          items_delayed: 0,
+        };
+        existing.total_items += 1;
+        existing.total_prep_time += prepTime;
+        if (prepTime <= 10) {
+          existing.items_on_time += 1;
+        } else {
+          existing.items_delayed += 1;
+        }
+        stationMap.set(item.station_type, existing);
+      });
+
+      setStationEfficiency(
+        Array.from(stationMap.values()).map(station => ({
+          ...station,
+          avg_prep_time_minutes: station.total_prep_time / station.total_items,
+          efficiency_percentage: (station.items_on_time / station.total_items) * 100,
         }))
       );
     }
   };
 
-  const fetchCategoryPerformance = async (start: string, end: string) => {
-    const { data, error } = await supabase.rpc("get_category_performance", {
-      _start_date: start,
-      _end_date: end,
-      _tenant_id: tenantId,
-    });
+  const fetchWaiterPerformance = async (start: string, end: string) => {
+    // Get orders with optional event filter
+    let ordersQuery = supabase
+      .from("orders")
+      .select(`
+        id,
+        waiter_id,
+        total_amount,
+        created_at,
+        paid_at,
+        profiles!orders_waiter_id_fkey (
+          full_name
+        )
+      `)
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("created_at", start)
+      .lte("created_at", end);
 
-    if (!error && data) {
-      setCategoryPerformance(
-        data.map((item: any) => ({
-          name: item.category,
-          value: parseFloat(item.total_revenue || 0),
-          percentage: parseFloat(item.percentage_of_total || 0),
+    if (selectedEventId !== "all") {
+      ordersQuery = ordersQuery.eq("event_id", selectedEventId);
+    }
+
+    const { data: orders, error } = await ordersQuery;
+
+    if (!error && orders) {
+      const waiterMap = new Map<string, any>();
+      orders.forEach((order: any) => {
+        const existing = waiterMap.get(order.waiter_id) || {
+          waiter_id: order.waiter_id,
+          waiter_name: order.profiles?.full_name || "Unknown",
+          total_orders: 0,
+          total_revenue: 0,
+          total_turnover_time: 0,
+        };
+        existing.total_orders += 1;
+        existing.total_revenue += parseFloat(order.total_amount || 0);
+        if (order.paid_at) {
+          existing.total_turnover_time += (new Date(order.paid_at).getTime() - new Date(order.created_at).getTime()) / 60000;
+        }
+        waiterMap.set(order.waiter_id, existing);
+      });
+
+      setWaiterPerformance(
+        Array.from(waiterMap.values()).map(waiter => ({
+          ...waiter,
+          avg_order_value: waiter.total_revenue / waiter.total_orders,
+          avg_table_turnover_minutes: waiter.total_turnover_time / waiter.total_orders,
         }))
+      );
+    }
+  };
+
+  const fetchRevenueTrends = async (start: string, end: string) => {
+    let query = supabase
+      .from("orders")
+      .select("id, created_at, total_amount, table_number")
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("created_at", start)
+      .lte("created_at", end);
+
+    if (selectedEventId !== "all") {
+      query = query.eq("event_id", selectedEventId);
+    }
+
+    const { data: orders, error } = await query;
+
+    if (!error && orders) {
+      const dateMap = new Map<string, any>();
+      orders.forEach((order: any) => {
+        const dateKey = new Date(order.created_at).toLocaleDateString();
+        const existing = dateMap.get(dateKey) || {
+          date: dateKey,
+          total_orders: 0,
+          total_revenue: 0,
+          tables: new Set(),
+        };
+        existing.total_orders += 1;
+        existing.total_revenue += parseFloat(order.total_amount || 0);
+        if (order.table_number) existing.tables.add(order.table_number);
+        dateMap.set(dateKey, existing);
+      });
+
+      setRevenueTrends(
+        Array.from(dateMap.values())
+          .map(item => ({
+            date: item.date,
+            revenue: item.total_revenue,
+            orders: item.total_orders,
+            avgOrder: item.total_revenue / item.total_orders,
+          }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      );
+    }
+  };
+
+  const fetchCategoryPerformance = async (start: string, end: string) => {
+    // Get orders with optional event filter
+    let ordersQuery = supabase
+      .from("orders")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("created_at", start)
+      .lte("created_at", end);
+
+    if (selectedEventId !== "all") {
+      ordersQuery = ordersQuery.eq("event_id", selectedEventId);
+    }
+
+    const { data: orders } = await ordersQuery;
+    if (!orders || orders.length === 0) {
+      setCategoryPerformance([]);
+      return;
+    }
+
+    const orderIds = orders.map(o => o.id);
+
+    // Get order items for those orders
+    const { data: orderItems, error } = await supabase
+      .from("order_items")
+      .select(`
+        quantity,
+        price,
+        menu_items (
+          category
+        )
+      `)
+      .in("order_id", orderIds);
+
+    if (!error && orderItems) {
+      const categoryMap = new Map<string, number>();
+      let grandTotal = 0;
+
+      orderItems.forEach((item: any) => {
+        const revenue = item.price * item.quantity;
+        const category = item.menu_items?.category || "Unknown";
+        categoryMap.set(category, (categoryMap.get(category) || 0) + revenue);
+        grandTotal += revenue;
+      });
+
+      setCategoryPerformance(
+        Array.from(categoryMap.entries())
+          .map(([name, value]) => ({
+            name,
+            value,
+            percentage: grandTotal > 0 ? (value / grandTotal) * 100 : 0,
+          }))
+          .sort((a, b) => b.value - a.value)
       );
     }
   };
@@ -333,19 +611,37 @@ export default function Analytics() {
             Comprehensive insights and performance metrics
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <Label>Time Range:</Label>
-          <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 Days</SelectItem>
-              <SelectItem value="14">Last 14 Days</SelectItem>
-              <SelectItem value="30">Last 30 Days</SelectItem>
-              <SelectItem value="90">Last 90 Days</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Label>Time Range:</Label>
+            <Select value={dateRange} onValueChange={setDateRange}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 Days</SelectItem>
+                <SelectItem value="14">Last 14 Days</SelectItem>
+                <SelectItem value="30">Last 30 Days</SelectItem>
+                <SelectItem value="90">Last 90 Days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label>Event:</Label>
+            <Select value={selectedEventId} onValueChange={setSelectedEventId}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All Events" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Events</SelectItem>
+                {events.map((event) => (
+                  <SelectItem key={event.id} value={event.id}>
+                    {event.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button onClick={fetchAllAnalytics}>Refresh</Button>
         </div>
       </div>
