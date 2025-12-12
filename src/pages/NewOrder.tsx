@@ -38,6 +38,7 @@ interface Table {
   is_adhoc: boolean;
   assigned_waiter_id: string | null;
   zone_id: string | null;
+  reservation_name: string | null;
   zone?: {
     name: string;
     color: string;
@@ -156,6 +157,7 @@ const NewOrder = () => {
           zone_id,
           is_adhoc,
           assigned_waiter_id,
+          reservation_name,
           zone:zones (
             name,
             color
@@ -438,6 +440,12 @@ const NewOrder = () => {
                 <p className="text-xs text-muted-foreground">No tables found for this event</p>
               )}
             </div>
+            {selectedTable && tables.find(t => t.id === selectedTable)?.reservation_name && (
+              <div className="p-3 bg-muted/50 rounded-md">
+                <p className="text-sm text-muted-foreground">Reservation</p>
+                <p className="font-medium">{tables.find(t => t.id === selectedTable)?.reservation_name}</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="guest">Guest Name (Optional)</Label>
               <Input
