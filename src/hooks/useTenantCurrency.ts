@@ -81,7 +81,11 @@ export function useTenantCurrency() {
 
   const formatPrice = (price: number): string => {
     const symbol = CURRENCY_SYMBOLS[currency] || currency;
-    return `${symbol}${price.toFixed(2)}`;
+    const formattedNumber = price.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return `${symbol}${formattedNumber}`;
   };
 
   const getCurrencySymbol = (): string => {
