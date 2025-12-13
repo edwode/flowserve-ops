@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Download, TrendingUp, DollarSign, Users, ShoppingCart } from "lucide-react";
+import { Download, TrendingUp, DollarSign, Users, ShoppingCart, ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Select,
@@ -12,7 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface Event {
   id: string;
@@ -48,6 +52,14 @@ interface HourlySales {
   revenue: number;
 }
 
+type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales';
+
+interface ReportCardState {
+  id: ReportCardId;
+  title: string;
+  isOpen: boolean;
+}
+
 export function AdminReports() {
   const { toast } = useToast();
   const [events, setEvents] = useState<Event[]>([]);
@@ -62,7 +74,32 @@ export function AdminReports() {
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [waiterPerformance, setWaiterPerformance] = useState<WaiterPerformance[]>([]);
   const [hourlySales, setHourlySales] = useState<HourlySales[]>([]);
+  
+  const [reportCards, setReportCards] = useState<ReportCardState[]>([
+    { id: 'topItems', title: 'Top Selling Items', isOpen: true },
+    { id: 'waiterPerformance', title: 'Waiter Performance', isOpen: true },
+    { id: 'hourlySales', title: 'Sales by Hour', isOpen: true },
+  ]);
 
+  const toggleCard = (id: ReportCardId) => {
+    setReportCards(prev => prev.map(card => 
+      card.id === id ? { ...card, isOpen: !card.isOpen } : card
+    ));
+  };
+
+  const moveCard = (id: ReportCardId, direction: 'up' | 'down') => {
+    setReportCards(prev => {
+      const index = prev.findIndex(card => card.id === id);
+      if (index === -1) return prev;
+      if (direction === 'up' && index === 0) return prev;
+      if (direction === 'down' && index === prev.length - 1) return prev;
+      
+      const newCards = [...prev];
+      const swapIndex = direction === 'up' ? index - 1 : index + 1;
+      [newCards[index], newCards[swapIndex]] = [newCards[swapIndex], newCards[index]];
+      return newCards;
+    });
+  };
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -383,107 +420,140 @@ export function AdminReports() {
             </Card>
           </div>
 
-          {/* Top Selling Items */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Top Selling Items</h3>
-            <div className="space-y-3">
-              {topItems.map((item, index) => (
-                <div key={item.name} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-bold text-muted-foreground w-6">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {item.category} • {item.quantity} sold
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold">${item.revenue.toFixed(2)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        ${(item.revenue / item.quantity).toFixed(2)} avg
-                      </div>
-                    </div>
+          {/* Collapsible Report Cards */}
+          {reportCards.map((card, cardIndex) => (
+            <Collapsible key={card.id} open={card.isOpen} onOpenChange={() => toggleCard(card.id)}>
+              <Card className="overflow-hidden">
+                <div className="flex items-center justify-between p-4 bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold">{card.title}</h3>
                   </div>
-                  <Progress value={(item.revenue / maxItemRevenue) * 100} />
-                </div>
-              ))}
-
-              {topItems.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No sales data yet
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Waiter Performance */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Waiter Performance</h3>
-            <div className="space-y-4">
-              {waiterPerformance.map((waiter) => (
-                <div key={waiter.waiter_name} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{waiter.waiter_name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {waiter.orders_count} orders
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold">${waiter.total_revenue.toFixed(2)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        ${waiter.avg_order_value.toFixed(2)} avg
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); moveCard(card.id, 'up'); }}
+                      disabled={cardIndex === 0}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); moveCard(card.id, 'down'); }}
+                      disabled={cardIndex === reportCards.length - 1}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <ChevronDown className={`h-4 w-4 transition-transform ${card.isOpen ? 'rotate-180' : ''}`} />
+                      </Button>
+                    </CollapsibleTrigger>
                   </div>
-                  <Progress 
-                    value={(waiter.total_revenue / summary.totalRevenue) * 100} 
-                  />
                 </div>
-              ))}
-
-              {waiterPerformance.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No waiter data yet
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Hourly Sales */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Sales by Hour</h3>
-            <div className="space-y-3">
-              {hourlySales.map((hour) => (
-                <div key={hour.hour} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold w-16">
-                        {hour.hour.toString().padStart(2, '0')}:00
-                      </span>
-                      <div className="text-sm text-muted-foreground">
-                        {hour.orders} orders
+                <CollapsibleContent>
+                  <div className="p-6 pt-4">
+                    {card.id === 'topItems' && (
+                      <div className="space-y-3">
+                        {topItems.map((item, index) => (
+                          <div key={item.name} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl font-bold text-muted-foreground w-6">
+                                  {index + 1}
+                                </span>
+                                <div>
+                                  <div className="font-medium">{item.name}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {item.category} • {item.quantity} sold
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold">${item.revenue.toFixed(2)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  ${(item.revenue / item.quantity).toFixed(2)} avg
+                                </div>
+                              </div>
+                            </div>
+                            <Progress value={(item.revenue / maxItemRevenue) * 100} />
+                          </div>
+                        ))}
+                        {topItems.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No sales data yet
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="font-semibold">${hour.revenue.toFixed(2)}</div>
-                  </div>
-                  <Progress 
-                    value={(hour.revenue / Math.max(...hourlySales.map(h => h.revenue), 1)) * 100}
-                  />
-                </div>
-              ))}
+                    )}
 
-              {hourlySales.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No hourly data yet
-                </div>
-              )}
-            </div>
-          </Card>
+                    {card.id === 'waiterPerformance' && (
+                      <div className="space-y-4">
+                        {waiterPerformance.map((waiter) => (
+                          <div key={waiter.waiter_name} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-medium">{waiter.waiter_name}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {waiter.orders_count} orders
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold">${waiter.total_revenue.toFixed(2)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  ${waiter.avg_order_value.toFixed(2)} avg
+                                </div>
+                              </div>
+                            </div>
+                            <Progress 
+                              value={(waiter.total_revenue / summary.totalRevenue) * 100} 
+                            />
+                          </div>
+                        ))}
+                        {waiterPerformance.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No waiter data yet
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {card.id === 'hourlySales' && (
+                      <div className="space-y-3">
+                        {hourlySales.map((hour) => (
+                          <div key={hour.hour} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold w-16">
+                                  {hour.hour.toString().padStart(2, '0')}:00
+                                </span>
+                                <div className="text-sm text-muted-foreground">
+                                  {hour.orders} orders
+                                </div>
+                              </div>
+                              <div className="font-semibold">${hour.revenue.toFixed(2)}</div>
+                            </div>
+                            <Progress 
+                              value={(hour.revenue / Math.max(...hourlySales.map(h => h.revenue), 1)) * 100}
+                            />
+                          </div>
+                        ))}
+                        {hourlySales.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No hourly data yet
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          ))}
         </>
       )}
 
