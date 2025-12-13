@@ -52,7 +52,14 @@ interface HourlySales {
   revenue: number;
 }
 
-type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales';
+interface CashierPerformance {
+  cashier_name: string;
+  payments_count: number;
+  total_collected: number;
+  avg_payment: number;
+}
+
+type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance';
 
 interface ReportCardState {
   id: ReportCardId;
@@ -74,10 +81,12 @@ export function AdminReports() {
   const [topItems, setTopItems] = useState<TopItem[]>([]);
   const [waiterPerformance, setWaiterPerformance] = useState<WaiterPerformance[]>([]);
   const [hourlySales, setHourlySales] = useState<HourlySales[]>([]);
+  const [cashierPerformance, setCashierPerformance] = useState<CashierPerformance[]>([]);
   
   const [reportCards, setReportCards] = useState<ReportCardState[]>([
     { id: 'topItems', title: 'Top Selling Items', isOpen: true },
     { id: 'waiterPerformance', title: 'Waiter Performance', isOpen: true },
+    { id: 'cashierPerformance', title: 'Top Sales per Cashier', isOpen: true },
     { id: 'hourlySales', title: 'Sales by Hour', isOpen: true },
   ]);
 
@@ -138,6 +147,7 @@ export function AdminReports() {
       fetchTopItems(),
       fetchWaiterPerformance(),
       fetchHourlySales(),
+      fetchCashierPerformance(),
     ]);
   };
 
@@ -276,6 +286,45 @@ export function AdminReports() {
       setHourlySales(sales);
     } catch (error: any) {
       console.error("Error fetching hourly sales:", error);
+    }
+  };
+
+  const fetchCashierPerformance = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`
+          amount,
+          profiles!payments_confirmed_by_fkey (full_name),
+          orders!inner (event_id)
+        `)
+        .eq('orders.event_id', selectedEvent);
+
+      if (error) throw error;
+
+      const cashierMap: Record<string, { count: number; total: number }> = {};
+
+      data?.forEach((payment: any) => {
+        const name = payment.profiles?.full_name || 'Unknown';
+        if (!cashierMap[name]) {
+          cashierMap[name] = { count: 0, total: 0 };
+        }
+        cashierMap[name].count++;
+        cashierMap[name].total += payment.amount || 0;
+      });
+
+      const performance: CashierPerformance[] = Object.entries(cashierMap)
+        .map(([name, data]) => ({
+          cashier_name: name,
+          payments_count: data.count,
+          total_collected: data.total,
+          avg_payment: data.count > 0 ? data.total / data.count : 0,
+        }))
+        .sort((a, b) => b.total_collected - a.total_collected);
+
+      setCashierPerformance(performance);
+    } catch (error: any) {
+      console.error("Error fetching cashier performance:", error);
     }
   };
 
@@ -517,6 +566,43 @@ export function AdminReports() {
                         {waiterPerformance.length === 0 && (
                           <div className="text-center py-8 text-muted-foreground">
                             No waiter data yet
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {card.id === 'cashierPerformance' && (
+                      <div className="space-y-4">
+                        {cashierPerformance.map((cashier, index) => {
+                          const maxCashierRevenue = Math.max(...cashierPerformance.map(c => c.total_collected), 1);
+                          return (
+                            <div key={cashier.cashier_name} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl font-bold text-muted-foreground w-6">
+                                    {index + 1}
+                                  </span>
+                                  <div>
+                                    <div className="font-medium">{cashier.cashier_name}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {cashier.payments_count} payments
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold">${cashier.total_collected.toFixed(2)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    ${cashier.avg_payment.toFixed(2)} avg
+                                  </div>
+                                </div>
+                              </div>
+                              <Progress value={(cashier.total_collected / maxCashierRevenue) * 100} />
+                            </div>
+                          );
+                        })}
+                        {cashierPerformance.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No cashier data yet
                           </div>
                         )}
                       </div>
