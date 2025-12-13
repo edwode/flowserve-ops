@@ -439,7 +439,8 @@ const Bar = () => {
         .from('order_items')
         .update({ 
           status: 'ready',
-          ready_at: new Date().toISOString()
+          ready_at: new Date().toISOString(),
+          assigned_to: user?.id
         })
         .eq('id', itemId);
 

@@ -217,6 +217,7 @@ export default function KitchenDisplay() {
       updates.dispatched_at = new Date().toISOString();
     } else if (newStatus === "ready") {
       updates.ready_at = new Date().toISOString();
+      updates.assigned_to = user?.id;
     }
 
     const { error } = await supabase
