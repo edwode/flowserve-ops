@@ -60,7 +60,13 @@ interface CashierPerformance {
   avg_payment: number;
 }
 
-type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance';
+interface DrinkDispenserStats {
+  category: string;
+  total_items: number;
+  total_revenue: number;
+}
+
+type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance' | 'drinkDispenser';
 
 interface ReportCardState {
   id: ReportCardId;
@@ -84,11 +90,13 @@ export function AdminReports() {
   const [waiterPerformance, setWaiterPerformance] = useState<WaiterPerformance[]>([]);
   const [hourlySales, setHourlySales] = useState<HourlySales[]>([]);
   const [cashierPerformance, setCashierPerformance] = useState<CashierPerformance[]>([]);
+  const [drinkDispenserStats, setDrinkDispenserStats] = useState<DrinkDispenserStats[]>([]);
   
   const [reportCards, setReportCards] = useState<ReportCardState[]>([
     { id: 'topItems', title: 'Top Selling Items', isOpen: true },
     { id: 'waiterPerformance', title: 'Waiter Performance', isOpen: true },
     { id: 'cashierPerformance', title: 'Top Sales per Cashier', isOpen: true },
+    { id: 'drinkDispenser', title: 'Drink Dispenser by Category', isOpen: true },
     { id: 'hourlySales', title: 'Sales by Hour', isOpen: true },
   ]);
 
@@ -150,6 +158,7 @@ export function AdminReports() {
       fetchWaiterPerformance(),
       fetchHourlySales(),
       fetchCashierPerformance(),
+      fetchDrinkDispenserStats(),
     ]);
   };
 
@@ -327,6 +336,46 @@ export function AdminReports() {
       setCashierPerformance(performance);
     } catch (error: any) {
       console.error("Error fetching cashier performance:", error);
+    }
+  };
+
+  const fetchDrinkDispenserStats = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('order_items')
+        .select(`
+          quantity,
+          price,
+          menu_items (category),
+          orders!inner (event_id)
+        `)
+        .eq('orders.event_id', selectedEvent)
+        .eq('station_type', 'drink_dispenser');
+
+      if (error) throw error;
+
+      const categoryMap: Record<string, { items: number; revenue: number }> = {};
+
+      data?.forEach((item: any) => {
+        const category = item.menu_items?.category || 'Unknown';
+        if (!categoryMap[category]) {
+          categoryMap[category] = { items: 0, revenue: 0 };
+        }
+        categoryMap[category].items += item.quantity;
+        categoryMap[category].revenue += item.quantity * item.price;
+      });
+
+      const stats: DrinkDispenserStats[] = Object.entries(categoryMap)
+        .map(([category, data]) => ({
+          category,
+          total_items: data.items,
+          total_revenue: data.revenue,
+        }))
+        .sort((a, b) => b.total_items - a.total_items);
+
+      setDrinkDispenserStats(stats);
+    } catch (error: any) {
+      console.error("Error fetching drink dispenser stats:", error);
     }
   };
 
@@ -605,6 +654,43 @@ export function AdminReports() {
                         {cashierPerformance.length === 0 && (
                           <div className="text-center py-8 text-muted-foreground">
                             No cashier data yet
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {card.id === 'drinkDispenser' && (
+                      <div className="space-y-4">
+                        {drinkDispenserStats.map((stat, index) => {
+                          const maxItems = Math.max(...drinkDispenserStats.map(s => s.total_items), 1);
+                          return (
+                            <div key={stat.category} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl font-bold text-muted-foreground w-6">
+                                    {index + 1}
+                                  </span>
+                                  <div>
+                                    <div className="font-medium">{stat.category}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {stat.total_items} items dispensed
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold">{formatPrice(stat.total_revenue)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatPrice(stat.total_revenue / stat.total_items)} avg/item
+                                  </div>
+                                </div>
+                              </div>
+                              <Progress value={(stat.total_items / maxItems) * 100} />
+                            </div>
+                          );
+                        })}
+                        {drinkDispenserStats.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No drink dispenser data yet
                           </div>
                         )}
                       </div>
