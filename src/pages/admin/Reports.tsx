@@ -72,7 +72,13 @@ interface DrinkDispenserStaff {
   total_revenue: number;
 }
 
-type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance' | 'drinkDispenser' | 'drinkDispenserStaff';
+interface MixologistStaff {
+  staff_name: string;
+  total_items: number;
+  total_revenue: number;
+}
+
+type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance' | 'drinkDispenser' | 'drinkDispenserStaff' | 'mixologistStaff';
 
 interface ReportCardState {
   id: ReportCardId;
@@ -98,6 +104,7 @@ export function AdminReports() {
   const [cashierPerformance, setCashierPerformance] = useState<CashierPerformance[]>([]);
   const [drinkDispenserStats, setDrinkDispenserStats] = useState<DrinkDispenserStats[]>([]);
   const [drinkDispenserStaff, setDrinkDispenserStaff] = useState<DrinkDispenserStaff[]>([]);
+  const [mixologistStaff, setMixologistStaff] = useState<MixologistStaff[]>([]);
   
   const [reportCards, setReportCards] = useState<ReportCardState[]>([
     { id: 'topItems', title: 'Top Selling Items', isOpen: true },
@@ -105,6 +112,7 @@ export function AdminReports() {
     { id: 'cashierPerformance', title: 'Top Sales per Cashier', isOpen: true },
     { id: 'drinkDispenser', title: 'Drink Dispenser by Category', isOpen: true },
     { id: 'drinkDispenserStaff', title: 'Drink Dispenser Staff Performance', isOpen: true },
+    { id: 'mixologistStaff', title: 'Mixologist Staff Performance', isOpen: true },
     { id: 'hourlySales', title: 'Sales by Hour', isOpen: true },
   ]);
 
@@ -168,6 +176,7 @@ export function AdminReports() {
       fetchCashierPerformance(),
       fetchDrinkDispenserStats(),
       fetchDrinkDispenserStaff(),
+      fetchMixologistStaff(),
     ]);
   };
 
@@ -428,6 +437,49 @@ export function AdminReports() {
       setDrinkDispenserStaff(staffStats);
     } catch (error: any) {
       console.error("Error fetching drink dispenser staff:", error);
+    }
+  };
+
+  const fetchMixologistStaff = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('order_items')
+        .select(`
+          quantity,
+          price,
+          assigned_to,
+          profiles!order_items_assigned_to_fkey (full_name),
+          orders!inner (event_id)
+        `)
+        .eq('orders.event_id', selectedEvent)
+        .eq('station_type', 'mixologist')
+        .not('assigned_to', 'is', null);
+
+      if (error) throw error;
+
+      const staffMap: Record<string, { name: string; items: number; revenue: number }> = {};
+
+      data?.forEach((item: any) => {
+        const staffId = item.assigned_to;
+        const staffName = item.profiles?.full_name || 'Unknown';
+        if (!staffMap[staffId]) {
+          staffMap[staffId] = { name: staffName, items: 0, revenue: 0 };
+        }
+        staffMap[staffId].items += item.quantity;
+        staffMap[staffId].revenue += item.quantity * item.price;
+      });
+
+      const staffStats: MixologistStaff[] = Object.values(staffMap)
+        .map(data => ({
+          staff_name: data.name,
+          total_items: data.items,
+          total_revenue: data.revenue,
+        }))
+        .sort((a, b) => b.total_items - a.total_items);
+
+      setMixologistStaff(staffStats);
+    } catch (error: any) {
+      console.error("Error fetching mixologist staff:", error);
     }
   };
 
@@ -780,6 +832,43 @@ export function AdminReports() {
                         {drinkDispenserStaff.length === 0 && (
                           <div className="text-center py-8 text-muted-foreground">
                             No drink dispenser staff data yet
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {card.id === 'mixologistStaff' && (
+                      <div className="space-y-4">
+                        {mixologistStaff.map((staff, index) => {
+                          const maxItems = Math.max(...mixologistStaff.map(s => s.total_items), 1);
+                          return (
+                            <div key={staff.staff_name} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl font-bold text-muted-foreground w-6">
+                                    {index + 1}
+                                  </span>
+                                  <div>
+                                    <div className="font-medium">{staff.staff_name}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {staff.total_items} items prepared
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold">{formatPrice(staff.total_revenue)}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatPrice(staff.total_revenue / staff.total_items)} avg/item
+                                  </div>
+                                </div>
+                              </div>
+                              <Progress value={(staff.total_items / maxItems) * 100} />
+                            </div>
+                          );
+                        })}
+                        {mixologistStaff.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No mixologist staff data yet
                           </div>
                         )}
                       </div>
