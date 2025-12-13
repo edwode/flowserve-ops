@@ -126,6 +126,150 @@ export type Database = {
           },
         ]
       }
+      inventory_zone_allocations: {
+        Row: {
+          allocated_quantity: number
+          created_at: string
+          event_id: string
+          id: string
+          menu_item_id: string
+          tenant_id: string
+          updated_at: string
+          zone_id: string
+        }
+        Insert: {
+          allocated_quantity?: number
+          created_at?: string
+          event_id: string
+          id?: string
+          menu_item_id: string
+          tenant_id: string
+          updated_at?: string
+          zone_id: string
+        }
+        Update: {
+          allocated_quantity?: number
+          created_at?: string
+          event_id?: string
+          id?: string
+          menu_item_id?: string
+          tenant_id?: string
+          updated_at?: string
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_zone_allocations_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_allocations_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_allocations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_allocations_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_zone_transfers: {
+        Row: {
+          created_at: string
+          event_id: string
+          from_zone_id: string
+          id: string
+          menu_item_id: string
+          quantity: number
+          reason: string | null
+          tenant_id: string
+          to_zone_id: string
+          transferred_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          from_zone_id: string
+          id?: string
+          menu_item_id: string
+          quantity: number
+          reason?: string | null
+          tenant_id: string
+          to_zone_id: string
+          transferred_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          from_zone_id?: string
+          id?: string
+          menu_item_id?: string
+          quantity?: number
+          reason?: string | null
+          tenant_id?: string
+          to_zone_id?: string
+          transferred_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_zone_transfers_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_transfers_from_zone_id_fkey"
+            columns: ["from_zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_transfers_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_transfers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_transfers_to_zone_id_fkey"
+            columns: ["to_zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_zone_transfers_transferred_by_fkey"
+            columns: ["transferred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_categories: {
         Row: {
           created_at: string
