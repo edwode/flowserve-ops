@@ -284,6 +284,7 @@ const Station = () => {
         .update({
           status: 'ready',
           ready_at: new Date().toISOString(),
+          assigned_to: user?.id,
         })
         .eq('id', itemId);
 
