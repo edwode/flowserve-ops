@@ -10,9 +10,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { PackageSearch, TrendingDown, History, AlertTriangle, Loader2 } from "lucide-react";
+import { PackageSearch, TrendingDown, History, AlertTriangle, Loader2, MapPin, Repeat } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ZoneAllocationDialog } from "@/components/inventory/ZoneAllocationDialog";
+import { ZoneTransferDialog } from "@/components/inventory/ZoneTransferDialog";
 
 interface MenuItem {
   id: string;
@@ -58,6 +60,9 @@ export default function AdminInventory() {
   const [adjustmentHistory, setAdjustmentHistory] = useState<InventoryAdjustment[]>([]);
   const [usageAnalytics, setUsageAnalytics] = useState<UsageAnalytics[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [zoneAllocationDialog, setZoneAllocationDialog] = useState(false);
+  const [zoneTransferDialog, setZoneTransferDialog] = useState(false);
+  const [selectedItemForZone, setSelectedItemForZone] = useState<MenuItem | null>(null);
 
   useEffect(() => {
     fetchEvents();
@@ -233,6 +238,21 @@ export default function AdminInventory() {
     setSelectedItem(item);
     setNewQuantity(item.current_inventory);
     setAdjustmentDialog(true);
+  };
+
+  const openZoneAllocationDialog = (item: MenuItem) => {
+    setSelectedItemForZone(item);
+    setZoneAllocationDialog(true);
+  };
+
+  const openZoneTransferDialog = (item: MenuItem) => {
+    setSelectedItemForZone(item);
+    setZoneTransferDialog(true);
+  };
+
+  const handleZoneAllocationComplete = () => {
+    fetchMenuItems();
+    fetchUsageAnalytics();
   };
 
   const getLowStockItems = () => {
@@ -417,13 +437,31 @@ export default function AdminInventory() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openAdjustmentDialog(item)}
-                                >
-                                  Adjust
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openAdjustmentDialog(item)}
+                                  >
+                                    Adjust
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openZoneAllocationDialog(item)}
+                                    title="Allocate to zones"
+                                  >
+                                    <MapPin className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openZoneTransferDialog(item)}
+                                    title="Transfer between zones"
+                                  >
+                                    <Repeat className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -621,6 +659,22 @@ export default function AdminInventory() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ZoneAllocationDialog
+        open={zoneAllocationDialog}
+        onOpenChange={setZoneAllocationDialog}
+        menuItem={selectedItemForZone}
+        eventId={selectedEvent}
+        onAllocationComplete={handleZoneAllocationComplete}
+      />
+
+      <ZoneTransferDialog
+        open={zoneTransferDialog}
+        onOpenChange={setZoneTransferDialog}
+        menuItem={selectedItemForZone}
+        eventId={selectedEvent}
+        onTransferComplete={handleZoneAllocationComplete}
+      />
     </div>
   );
 }
