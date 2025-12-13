@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, TrendingUp, DollarSign, Users, ShoppingCart, ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 import {
   Select,
   SelectContent,
@@ -69,6 +70,7 @@ interface ReportCardState {
 
 export function AdminReports() {
   const { toast } = useToast();
+  const { formatPrice } = useTenantCurrency();
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [summary, setSummary] = useState<EventSummary>({
@@ -435,9 +437,9 @@ export function AdminReports() {
                 <DollarSign className="h-4 w-4" />
                 Total Revenue
               </div>
-              <div className="text-2xl font-bold">${summary.totalRevenue.toFixed(2)}</div>
+              <div className="text-2xl font-bold">{formatPrice(summary.totalRevenue)}</div>
               <div className="text-xs text-muted-foreground mt-1">
-                Avg: ${summary.avgOrderValue.toFixed(2)}
+                Avg: {formatPrice(summary.avgOrderValue)}
               </div>
             </Card>
 
@@ -523,9 +525,9 @@ export function AdminReports() {
                                 </div>
                               </div>
                               <div className="text-right">
-                                <div className="font-bold">${item.revenue.toFixed(2)}</div>
+                                <div className="font-bold">{formatPrice(item.revenue)}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  ${(item.revenue / item.quantity).toFixed(2)} avg
+                                  {formatPrice(item.revenue / item.quantity)} avg
                                 </div>
                               </div>
                             </div>
@@ -552,9 +554,9 @@ export function AdminReports() {
                                 </div>
                               </div>
                               <div className="text-right">
-                                <div className="font-bold">${waiter.total_revenue.toFixed(2)}</div>
+                                <div className="font-bold">{formatPrice(waiter.total_revenue)}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  ${waiter.avg_order_value.toFixed(2)} avg
+                                  {formatPrice(waiter.avg_order_value)} avg
                                 </div>
                               </div>
                             </div>
@@ -590,9 +592,9 @@ export function AdminReports() {
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <div className="font-bold">${cashier.total_collected.toFixed(2)}</div>
+                                  <div className="font-bold">{formatPrice(cashier.total_collected)}</div>
                                   <div className="text-xs text-muted-foreground">
-                                    ${cashier.avg_payment.toFixed(2)} avg
+                                    {formatPrice(cashier.avg_payment)} avg
                                   </div>
                                 </div>
                               </div>
@@ -621,7 +623,7 @@ export function AdminReports() {
                                   {hour.orders} orders
                                 </div>
                               </div>
-                              <div className="font-semibold">${hour.revenue.toFixed(2)}</div>
+                              <div className="font-semibold">{formatPrice(hour.revenue)}</div>
                             </div>
                             <Progress 
                               value={(hour.revenue / Math.max(...hourlySales.map(h => h.revenue), 1)) * 100}
