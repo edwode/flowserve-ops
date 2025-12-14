@@ -75,6 +75,7 @@ const Station = () => {
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [userName, setUserName] = useState<string | null>(null);
   const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
+  const [userZoneNames, setUserZoneNames] = useState<string[]>([]);
 
   // Fetch user profile name
   useEffect(() => {
@@ -211,15 +212,17 @@ const Station = () => {
         return;
       }
 
-      // Fetch user's assigned zones from zone_role_assignments
+      // Fetch user's assigned zones from zone_role_assignments with zone names
       const { data: zoneAssignments } = await supabase
         .from('zone_role_assignments')
-        .select('zone_id')
+        .select('zone_id, zones(name)')
         .eq('user_id', user.id)
         .eq('tenant_id', tenantId);
 
       const zoneIds = zoneAssignments?.map(z => z.zone_id) || [];
+      const zoneNames = zoneAssignments?.map(z => (z.zones as any)?.name).filter(Boolean) || [];
       setUserZoneIds(zoneIds);
+      setUserZoneNames(zoneNames);
 
       setStationType(station);
       await fetchOrderItems(station, zoneIds);
@@ -519,7 +522,7 @@ const Station = () => {
           <div>
             <h1 className="text-xl font-bold">{getStationName()}</h1>
             <p className="text-sm text-muted-foreground">
-              {userName ? `${userName} • ` : ''}{orderItems.length} pending orders
+              {userName ? `${userName} • ` : ''}{userZoneNames.length > 0 ? `${userZoneNames.join(', ')} • ` : ''}{orderItems.length} pending orders
             </p>
           </div>
           <div className="flex items-center gap-2">

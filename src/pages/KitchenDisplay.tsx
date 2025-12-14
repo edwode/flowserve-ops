@@ -50,6 +50,7 @@ export default function KitchenDisplay() {
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [stationType, setStationType] = useState<string>("");
   const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
+  const [userZoneNames, setUserZoneNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -111,15 +112,17 @@ export default function KitchenDisplay() {
       setStationType(roleToStationType[userRole.role] || "");
     }
 
-    // Fetch user's assigned zones from zone_role_assignments
+    // Fetch user's assigned zones from zone_role_assignments with zone names
     const { data: zoneAssignments } = await supabase
       .from('zone_role_assignments')
-      .select('zone_id')
+      .select('zone_id, zones(name)')
       .eq('user_id', user.id)
       .eq('tenant_id', tenantId);
 
     const zoneIds = zoneAssignments?.map(z => z.zone_id) || [];
+    const zoneNames = zoneAssignments?.map(z => (z.zones as any)?.name).filter(Boolean) || [];
     setUserZoneIds(zoneIds);
+    setUserZoneNames(zoneNames);
   };
 
   const fetchEvents = async () => {
@@ -315,7 +318,7 @@ export default function KitchenDisplay() {
           <div>
             <h1 className="text-4xl font-bold">Kitchen Display System</h1>
             <p className="text-muted-foreground capitalize">
-              {stationType?.replace("_", " ")} Station
+              {stationType?.replace("_", " ")} Station{userZoneNames.length > 0 ? ` • ${userZoneNames.join(', ')}` : ''}
             </p>
           </div>
           <Select value={selectedEvent} onValueChange={setSelectedEvent}>
