@@ -74,6 +74,8 @@ const Bar = () => {
   const [processing, setProcessing] = useState(false);
   const [activeEvent, setActiveEvent] = useState<string>("");
   const [userName, setUserName] = useState<string | null>(null);
+  const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
+  const [userZoneNames, setUserZoneNames] = useState<string[]>([]);
 
   // Fetch user profile name
   useEffect(() => {
@@ -90,14 +92,15 @@ const Bar = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && tenantId) {
+      fetchUserZones();
       fetchData();
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, tenantId]);
 
-  // Separate effect for realtime subscription that depends on activeEvent
+  // Set up real-time subscription only after we have zone info
   useEffect(() => {
-    if (!activeEvent) return;
+    if (!activeEvent || userZoneIds.length === 0) return;
     
     const channel = supabase
       .channel('bar-updates')
@@ -128,7 +131,23 @@ const Bar = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeEvent]);
+  }, [activeEvent, userZoneIds]);
+
+  const fetchUserZones = async () => {
+    if (!user || !tenantId) return;
+
+    // Fetch user's assigned zones from zone_role_assignments with zone names
+    const { data: zoneAssignments } = await supabase
+      .from('zone_role_assignments')
+      .select('zone_id, zones(name)')
+      .eq('user_id', user.id)
+      .eq('tenant_id', tenantId);
+
+    const zoneIds = zoneAssignments?.map(z => z.zone_id) || [];
+    const zoneNames = zoneAssignments?.map(z => (z.zones as any)?.name).filter(Boolean) || [];
+    setUserZoneIds(zoneIds);
+    setUserZoneNames(zoneNames);
+  };
 
   const fetchData = async () => {
     if (!user) return;
@@ -228,7 +247,25 @@ const Bar = () => {
     const eid = eventId || activeEvent;
     if (!eid) return;
 
+    // If user has no zone assignments, show no orders
+    if (userZoneIds.length === 0) {
+      setOrders([]);
+      return;
+    }
+
     try {
+      // First get table numbers in user's assigned zones for the event
+      const { data: tablesInZones } = await supabase
+        .from('tables')
+        .select('table_number, event_id')
+        .in('zone_id', userZoneIds)
+        .eq('event_id', eid);
+
+      if (!tablesInZones || tablesInZones.length === 0) {
+        setOrders([]);
+        return;
+      }
+
       // Fetch orders that have bar or mixologist items (exclude paid orders)
       const { data, error } = await supabase
         .from('orders')
@@ -255,8 +292,13 @@ const Bar = () => {
 
       if (error) throw error;
       
+      // Filter orders to only those where table_number matches tables in user's zones
+      const filteredData = (data || []).filter(order => 
+        tablesInZones.some(t => t.table_number === order.table_number)
+      );
+      
       // Remove duplicates since an order might have multiple bar items
-      const uniqueOrders = data?.reduce((acc: Order[], order: any) => {
+      const uniqueOrders = filteredData.reduce((acc: Order[], order: any) => {
         if (!acc.find(o => o.id === order.id)) {
           // Filter only bar/mixologist items
           const barItems = order.order_items
@@ -503,7 +545,7 @@ const Bar = () => {
           <div>
             <h1 className="text-xl font-bold">Bar Station</h1>
             <p className="text-sm text-muted-foreground">
-              {userName ? `${userName} • ` : ''}Quick service & payment
+              {userName ? `${userName} • ` : ''}{userZoneNames.length > 0 ? `${userZoneNames.join(', ')} • ` : ''}Quick service & payment
             </p>
           </div>
           <div className="flex items-center gap-2">
