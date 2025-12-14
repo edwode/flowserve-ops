@@ -126,6 +126,21 @@ const Cashier = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [showConsolidatedDialog, setShowConsolidatedDialog] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Fetch user profile name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      if (data?.full_name) setUserName(data.full_name);
+    };
+    fetchUserName();
+  }, [user]);
 
   // Group orders by table for Payments tab
   const groupedOrders = useMemo(() => {
@@ -819,7 +834,7 @@ const Cashier = () => {
           <div>
             <h1 className="text-xl font-bold">Cashier Station</h1>
             <p className="text-sm text-muted-foreground">
-              {orders.length} pending payments
+              {userName ? `${userName} • ` : ''}{orders.length} pending payments
             </p>
           </div>
           <div className="flex items-center gap-2">

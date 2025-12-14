@@ -73,6 +73,21 @@ const Station = () => {
   const [stationType, setStationType] = useState<"drink_dispenser" | "meal_dispenser" | "mixologist" | "bar" | "">("");
   const [outOfStockItem, setOutOfStockItem] = useState<{ id: string; name: string } | null>(null);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Fetch user profile name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      if (data?.full_name) setUserName(data.full_name);
+    };
+    fetchUserName();
+  }, [user]);
 
   // Group order items by table name
   const groupedOrders = useMemo(() => {
@@ -430,7 +445,7 @@ const Station = () => {
           <div>
             <h1 className="text-xl font-bold">{getStationName()}</h1>
             <p className="text-sm text-muted-foreground">
-              {orderItems.length} pending orders
+              {userName ? `${userName} • ` : ''}{orderItems.length} pending orders
             </p>
           </div>
           <div className="flex items-center gap-2">

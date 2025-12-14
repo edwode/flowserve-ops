@@ -65,6 +65,21 @@ const Manager = () => {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Fetch user profile name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      if (data?.full_name) setUserName(data.full_name);
+    };
+    fetchUserName();
+  }, [user]);
   const [orderStats, setOrderStats] = useState<OrderStats>({
     pending: 0,
     dispatched: 0,
@@ -365,7 +380,9 @@ const Manager = () => {
           <div className="flex items-center gap-3">
             <Activity className="h-6 w-6 text-primary animate-pulse" />
             <div className="flex-1">
-              <h1 className="text-xl font-bold">Real-Time Dashboard</h1>
+              <h1 className="text-xl font-bold">
+                {userName ? `${userName}'s Dashboard` : 'Real-Time Dashboard'}
+              </h1>
               <div className="flex items-center gap-2 mt-1">
                 <Select value={selectedEvent} onValueChange={setSelectedEvent}>
                   <SelectTrigger className="w-[250px] h-8">
