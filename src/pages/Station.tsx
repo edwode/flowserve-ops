@@ -74,6 +74,7 @@ const Station = () => {
   const [outOfStockItem, setOutOfStockItem] = useState<{ id: string; name: string } | null>(null);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [userName, setUserName] = useState<string | null>(null);
+  const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
 
   // Fetch user profile name
   useEffect(() => {
@@ -137,6 +138,11 @@ const Station = () => {
     if (!authLoading && user && tenantId) {
       fetchStationData();
     }
+  }, [authLoading, user, tenantId]);
+
+  // Set up real-time subscriptions only after we have zone info
+  useEffect(() => {
+    if (!stationType || userZoneIds.length === 0) return;
     
     const channel = supabase
       .channel('station-updates')
@@ -167,7 +173,7 @@ const Station = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [stationType, authLoading, user, tenantId]);
+  }, [stationType, userZoneIds]);
 
   const fetchStationData = async () => {
     if (!user || !tenantId) return;
@@ -205,9 +211,19 @@ const Station = () => {
         return;
       }
 
+      // Fetch user's assigned zones from zone_role_assignments
+      const { data: zoneAssignments } = await supabase
+        .from('zone_role_assignments')
+        .select('zone_id')
+        .eq('user_id', user.id)
+        .eq('tenant_id', tenantId);
+
+      const zoneIds = zoneAssignments?.map(z => z.zone_id) || [];
+      setUserZoneIds(zoneIds);
+
       setStationType(station);
-      await fetchOrderItems(station);
-      await fetchReturns(station);
+      await fetchOrderItems(station, zoneIds);
+      await fetchReturns(station, zoneIds);
     } catch (error: any) {
       toast({
         title: "Error loading station",
@@ -219,11 +235,32 @@ const Station = () => {
     }
   };
 
-  const fetchOrderItems = async (station?: "drink_dispenser" | "meal_dispenser" | "mixologist" | "bar") => {
+  const fetchOrderItems = async (station?: "drink_dispenser" | "meal_dispenser" | "mixologist" | "bar", zoneIds?: string[]) => {
     const type = station || stationType;
+    const zones = zoneIds || userZoneIds;
     if (!type) return;
 
     try {
+      // If user has no zone assignments, show no orders
+      if (zones.length === 0) {
+        setOrderItems([]);
+        return;
+      }
+
+      // First get table numbers in user's assigned zones
+      const { data: tablesInZones } = await supabase
+        .from('tables')
+        .select('table_number, event_id')
+        .in('zone_id', zones);
+
+      if (!tablesInZones || tablesInZones.length === 0) {
+        setOrderItems([]);
+        return;
+      }
+
+      // Get unique table_number + event_id combinations
+      const tableNumbers = [...new Set(tablesInZones.map(t => t.table_number))];
+
       const { data, error } = await supabase
         .from('order_items')
         .select(`
@@ -240,6 +277,7 @@ const Station = () => {
             order_number,
             table_number,
             guest_name,
+            event_id,
             profiles (full_name)
           )
         `)
@@ -248,7 +286,16 @@ const Station = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setOrderItems(data || []);
+
+      // Filter order items to only those where order.table_number + event_id match tables in user's zones
+      const filteredItems = (data || []).filter(item => {
+        const order = item.orders as any;
+        return tablesInZones.some(
+          t => t.table_number === order.table_number && t.event_id === order.event_id
+        );
+      });
+
+      setOrderItems(filteredItems);
     } catch (error: any) {
       toast({
         title: "Error loading orders",
@@ -258,11 +305,29 @@ const Station = () => {
     }
   };
 
-  const fetchReturns = async (station?: "drink_dispenser" | "meal_dispenser" | "mixologist" | "bar") => {
+  const fetchReturns = async (station?: "drink_dispenser" | "meal_dispenser" | "mixologist" | "bar", zoneIds?: string[]) => {
     const type = station || stationType;
+    const zones = zoneIds || userZoneIds;
     if (!type) return;
 
     try {
+      // If user has no zone assignments, show no returns
+      if (zones.length === 0) {
+        setReturns([]);
+        return;
+      }
+
+      // First get table numbers in user's assigned zones
+      const { data: tablesInZones } = await supabase
+        .from('tables')
+        .select('table_number, event_id')
+        .in('zone_id', zones);
+
+      if (!tablesInZones || tablesInZones.length === 0) {
+        setReturns([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('order_returns')
         .select(`
@@ -274,7 +339,7 @@ const Station = () => {
             station_type,
             quantity,
             menu_items (name),
-            orders (order_number, table_number)
+            orders (order_number, table_number, event_id)
           )
         `)
         .eq('order_items.station_type', type)
@@ -282,7 +347,16 @@ const Station = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setReturns(data || []);
+
+      // Filter returns to only those where order.table_number + event_id match tables in user's zones
+      const filteredReturns = (data || []).filter(returnItem => {
+        const order = (returnItem.order_items as any).orders;
+        return tablesInZones.some(
+          t => t.table_number === order.table_number && t.event_id === order.event_id
+        );
+      });
+
+      setReturns(filteredReturns);
     } catch (error: any) {
       toast({
         title: "Error loading returns",
