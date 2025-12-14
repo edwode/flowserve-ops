@@ -18,42 +18,59 @@ const Dashboard = () => {
         // Check if user has a tenant assigned
         const { data: profile } = await supabase
           .from('profiles')
-          .select('tenant_id, user_roles(role)')
+          .select('tenant_id')
           .eq('id', session.user.id)
           .single();
 
         if (!profile?.tenant_id) {
           // No tenant assigned yet - redirect to setup
           navigate('/setup');
-        } else if (profile.user_roles && profile.user_roles.length > 0) {
-          // Route based on role
-          const role = (profile.user_roles as any[])[0].role;
-          switch (role) {
-            case 'waiter':
-              navigate('/waiter');
-              break;
-            case 'cashier':
-              navigate('/cashier');
-              break;
-            case 'drink_dispenser':
-            case 'meal_dispenser':
-            case 'mixologist':
-              navigate('/station');
-              break;
-            case 'bar_staff':
-              navigate('/bar');
-              break;
-            case 'event_manager':
-              navigate('/manager');
-              break;
-            case 'tenant_admin':
-              navigate('/admin');
-              break;
-            default:
-              navigate('/setup');
-          }
-        } else {
+          setLoading(false);
+          return;
+        }
+
+        // Fetch user role separately
+        const { data: userRole } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .eq('tenant_id', profile.tenant_id)
+          .single();
+
+        if (!userRole?.role) {
           navigate('/setup');
+          setLoading(false);
+          return;
+        }
+
+        // Route based on role
+        switch (userRole.role) {
+          case 'waiter':
+            navigate('/waiter');
+            break;
+          case 'cashier':
+            navigate('/cashier');
+            break;
+          case 'drink_dispenser':
+          case 'meal_dispenser':
+          case 'mixologist':
+            navigate('/station');
+            break;
+          case 'bar_staff':
+            navigate('/bar');
+            break;
+          case 'event_manager':
+            navigate('/manager');
+            break;
+          case 'tenant_admin':
+            navigate('/admin');
+            break;
+          case 'super_admin':
+          case 'support_admin':
+            navigate('/admin');
+            break;
+          default:
+            navigate('/setup');
         }
       } else {
         navigate('/auth');
