@@ -49,6 +49,21 @@ const Waiter = () => {
   const [loading, setLoading] = useState(true);
   const [usingCache, setUsingCache] = useState(false);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Fetch user profile name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      if (data?.full_name) setUserName(data.full_name);
+    };
+    fetchUserName();
+  }, [user]);
 
   // Group orders by table and sort by status priority
   const groupedOrders = useMemo(() => {
@@ -274,7 +289,9 @@ const Waiter = () => {
         <div className="flex items-center justify-between p-4">
           <div>
             <h1 className="text-xl font-bold">Waiter Station</h1>
-            <p className="text-sm text-muted-foreground">Manage your orders</p>
+            <p className="text-sm text-muted-foreground">
+              {userName ? `Welcome, ${userName}` : 'Manage your orders'}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <OfflineIndicator />

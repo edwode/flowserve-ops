@@ -73,6 +73,21 @@ const Bar = () => {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "pos" | "transfer">("cash");
   const [processing, setProcessing] = useState(false);
   const [activeEvent, setActiveEvent] = useState<string>("");
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Fetch user profile name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      if (data?.full_name) setUserName(data.full_name);
+    };
+    fetchUserName();
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -487,7 +502,9 @@ const Bar = () => {
         <div className="flex items-center justify-between p-4">
           <div>
             <h1 className="text-xl font-bold">Bar Station</h1>
-            <p className="text-sm text-muted-foreground">Quick service & payment</p>
+            <p className="text-sm text-muted-foreground">
+              {userName ? `${userName} • ` : ''}Quick service & payment
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
