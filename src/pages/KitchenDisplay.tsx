@@ -49,6 +49,7 @@ export default function KitchenDisplay() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [stationType, setStationType] = useState<string>("");
+  const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -60,14 +61,35 @@ export default function KitchenDisplay() {
   }, [authLoading, user, tenantId]);
 
   useEffect(() => {
-    if (selectedEvent && stationType) {
+    if (selectedEvent && stationType && userZoneIds.length > 0) {
       fetchOrderItems();
-      subscribeToOrderItems();
     }
+  }, [selectedEvent, stationType, userZoneIds]);
+
+  // Set up real-time subscription only after we have zone info
+  useEffect(() => {
+    if (!stationType || userZoneIds.length === 0) return;
+    
+    const channel = supabase
+      .channel("order-items-kds")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "order_items",
+          filter: `station_type=eq.${stationType}`,
+        },
+        () => {
+          fetchOrderItems();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeAllChannels();
+      supabase.removeChannel(channel);
     };
-  }, [selectedEvent, stationType]);
+  }, [stationType, userZoneIds, selectedEvent]);
 
   const fetchUserStationType = async () => {
     if (!user || !tenantId) return;
@@ -88,6 +110,16 @@ export default function KitchenDisplay() {
       };
       setStationType(roleToStationType[userRole.role] || "");
     }
+
+    // Fetch user's assigned zones from zone_role_assignments
+    const { data: zoneAssignments } = await supabase
+      .from('zone_role_assignments')
+      .select('zone_id')
+      .eq('user_id', user.id)
+      .eq('tenant_id', tenantId);
+
+    const zoneIds = zoneAssignments?.map(z => z.zone_id) || [];
+    setUserZoneIds(zoneIds);
   };
 
   const fetchEvents = async () => {
@@ -113,61 +145,71 @@ export default function KitchenDisplay() {
   };
 
   const fetchOrderItems = async () => {
-    if (!selectedEvent || !stationType) return;
+    if (!selectedEvent || !stationType || userZoneIds.length === 0) return;
 
     setLoading(true);
-    const { data, error } = await supabase
-      .from("order_items")
-      .select(
-        `
-        *,
-        menu_item:menu_items(name, category),
-        order:orders(
-          order_number,
-          table_number,
-          guest_name,
-          waiter:profiles!waiter_id(full_name)
-        )
-      `
-      )
-      .eq("station_type", stationType as any)
-      .in("status", ["pending", "dispatched"])
-      .order("created_at", { ascending: true });
 
-    if (error) {
+    try {
+      // First get table numbers in user's assigned zones for the selected event
+      const { data: tablesInZones } = await supabase
+        .from('tables')
+        .select('table_number, event_id')
+        .in('zone_id', userZoneIds)
+        .eq('event_id', selectedEvent);
+
+      if (!tablesInZones || tablesInZones.length === 0) {
+        setOrderItems([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("order_items")
+        .select(
+          `
+          *,
+          menu_item:menu_items(name, category),
+          order:orders(
+            order_number,
+            table_number,
+            guest_name,
+            event_id,
+            waiter:profiles!waiter_id(full_name)
+          )
+        `
+        )
+        .eq("station_type", stationType as any)
+        .in("status", ["pending", "dispatched"])
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch order items",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Filter order items to only those where order.table_number + event_id match tables in user's zones
+      const filteredItems = (data || []).filter(item => {
+        const order = item.order as any;
+        return tablesInZones.some(
+          t => t.table_number === order.table_number && t.event_id === order.event_id
+        );
+      });
+
+      setOrderItems(filteredItems as OrderItem[]);
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to fetch order items",
+        description: error.message,
         variant: "destructive",
       });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setOrderItems((data || []) as OrderItem[]);
-    setLoading(false);
-  };
-
-  const subscribeToOrderItems = () => {
-    const channel = supabase
-      .channel("order-items-kds")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "order_items",
-          filter: `station_type=eq.${stationType}`,
-        },
-        () => {
-          fetchOrderItems();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   };
 
   const getStatusColor = (status: string) => {
