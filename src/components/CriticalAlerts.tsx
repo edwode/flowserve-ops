@@ -19,10 +19,32 @@ interface CriticalAlert {
 interface CriticalAlertsProps {
   eventId: string;
   tenantId: string;
+  zoneIds?: string[];
 }
 
-export const CriticalAlerts = ({ eventId, tenantId }: CriticalAlertsProps) => {
+export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsProps) => {
   const [alerts, setAlerts] = useState<CriticalAlert[]>([]);
+  const [tableNumbers, setTableNumbers] = useState<string[]>([]);
+
+  // Fetch tables in assigned zones
+  useEffect(() => {
+    const fetchZoneTables = async () => {
+      if (!zoneIds || zoneIds.length === 0) {
+        setTableNumbers([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('tables')
+        .select('table_number')
+        .eq('event_id', eventId)
+        .in('zone_id', zoneIds);
+
+      setTableNumbers(data?.map(t => t.table_number) || []);
+    };
+
+    fetchZoneTables();
+  }, [eventId, zoneIds]);
 
   useEffect(() => {
     checkForAlerts();
@@ -62,23 +84,36 @@ export const CriticalAlerts = ({ eventId, tenantId }: CriticalAlertsProps) => {
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(menuChannel);
     };
-  }, [eventId, tenantId]);
+  }, [eventId, tenantId, tableNumbers]);
 
   const checkForAlerts = async () => {
     const newAlerts: CriticalAlert[] = [];
 
     // Check for delayed orders (>15 minutes in pending/dispatched)
-    const { data: delayedOrders } = await supabase
+    // Filter by tables in assigned zones if zoneIds provided
+    let delayedOrdersQuery = supabase
       .from('order_items')
       .select(`
         id,
         created_at,
         status,
-        orders!inner(order_number, table_number)
+        orders!inner(order_number, table_number, event_id)
       `)
       .eq('tenant_id', tenantId)
+      .eq('orders.event_id', eventId)
       .in('status', ['pending', 'dispatched'])
       .lt('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
+    // If zone filtering is enabled and we have table numbers
+    if (zoneIds && zoneIds.length > 0 && tableNumbers.length > 0) {
+      delayedOrdersQuery = delayedOrdersQuery.in('orders.table_number', tableNumbers);
+    } else if (zoneIds && zoneIds.length > 0 && tableNumbers.length === 0) {
+      // No tables in assigned zones, skip delayed order check
+      setAlerts([]);
+      return;
+    }
+
+    const { data: delayedOrders } = await delayedOrdersQuery;
 
     if (delayedOrders && delayedOrders.length > 0) {
       delayedOrders.forEach((order: any) => {
@@ -95,12 +130,28 @@ export const CriticalAlerts = ({ eventId, tenantId }: CriticalAlertsProps) => {
     }
 
     // Check for out of stock items
-    const { data: outOfStock } = await supabase
+    let outOfStockQuery = supabase
       .from('menu_items')
       .select('id, name, category')
       .eq('tenant_id', tenantId)
       .eq('event_id', eventId)
       .eq('is_available', false);
+
+    // If zone filtering, get menu items allocated to those zones
+    if (zoneIds && zoneIds.length > 0) {
+      const { data: zoneAllocations } = await supabase
+        .from('inventory_zone_allocations')
+        .select('menu_item_id')
+        .eq('event_id', eventId)
+        .in('zone_id', zoneIds);
+
+      const menuItemIds = zoneAllocations?.map(za => za.menu_item_id) || [];
+      if (menuItemIds.length > 0) {
+        outOfStockQuery = outOfStockQuery.in('id', menuItemIds);
+      }
+    }
+
+    const { data: outOfStock } = await outOfStockQuery;
 
     if (outOfStock && outOfStock.length > 0) {
       outOfStock.forEach((item) => {
@@ -116,20 +167,32 @@ export const CriticalAlerts = ({ eventId, tenantId }: CriticalAlertsProps) => {
       });
     }
 
-    // Check for recent returns
-    const { data: returns } = await supabase
+    // Check for recent returns - filter by tables in assigned zones
+    let returnsQuery = supabase
       .from('order_returns')
       .select(`
         id,
         reason,
         created_at,
         order_items!inner(
-          menu_items(name)
+          menu_items(name),
+          orders!inner(table_number, event_id)
         )
       `)
       .eq('tenant_id', tenantId)
+      .eq('order_items.orders.event_id', eventId)
       .is('confirmed_at', null)
       .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+
+    if (zoneIds && zoneIds.length > 0 && tableNumbers.length > 0) {
+      returnsQuery = returnsQuery.in('order_items.orders.table_number', tableNumbers);
+    } else if (zoneIds && zoneIds.length > 0 && tableNumbers.length === 0) {
+      // No tables in assigned zones, no returns to show
+      setAlerts(newAlerts);
+      return;
+    }
+
+    const { data: returns } = await returnsQuery;
 
     if (returns && returns.length > 0) {
       returns.forEach((ret: any) => {

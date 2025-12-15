@@ -27,10 +27,32 @@ interface OrderItem {
 interface LiveOrderTrackingProps {
   eventId: string;
   tenantId: string;
+  zoneIds?: string[];
 }
 
-export const LiveOrderTracking = ({ eventId, tenantId }: LiveOrderTrackingProps) => {
+export const LiveOrderTracking = ({ eventId, tenantId, zoneIds }: LiveOrderTrackingProps) => {
   const [activeOrders, setActiveOrders] = useState<OrderItem[]>([]);
+  const [tableNumbers, setTableNumbers] = useState<string[]>([]);
+
+  // Fetch tables in assigned zones
+  useEffect(() => {
+    const fetchZoneTables = async () => {
+      if (!zoneIds || zoneIds.length === 0) {
+        setTableNumbers([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('tables')
+        .select('table_number')
+        .eq('event_id', eventId)
+        .in('zone_id', zoneIds);
+
+      setTableNumbers(data?.map(t => t.table_number) || []);
+    };
+
+    fetchZoneTables();
+  }, [eventId, zoneIds]);
 
   useEffect(() => {
     fetchActiveOrders();
@@ -53,10 +75,10 @@ export const LiveOrderTracking = ({ eventId, tenantId }: LiveOrderTrackingProps)
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [eventId, tenantId]);
+  }, [eventId, tenantId, tableNumbers]);
 
   const fetchActiveOrders = async () => {
-    const { data } = await supabase
+    let query = supabase
       .from('order_items')
       .select(`
         id,
@@ -73,6 +95,17 @@ export const LiveOrderTracking = ({ eventId, tenantId }: LiveOrderTrackingProps)
       .in('status', ['pending', 'dispatched'])
       .order('created_at', { ascending: false })
       .limit(20);
+
+    // If zone filtering is enabled and we have table numbers
+    if (zoneIds && zoneIds.length > 0 && tableNumbers.length > 0) {
+      query = query.in('orders.table_number', tableNumbers);
+    } else if (zoneIds && zoneIds.length > 0 && tableNumbers.length === 0) {
+      // No tables in assigned zones, show empty
+      setActiveOrders([]);
+      return;
+    }
+
+    const { data } = await query;
 
     if (data) {
       setActiveOrders(data as any);
