@@ -916,8 +916,8 @@ export function AdminStaff() {
                       </Badge>
                     ))}
                     
-                    {/* Show single zone for waiters */}
-                    {member.zone && !isStationRole(member.user_roles[0]?.role) && (
+                    {/* Show single zone for waiters and event managers */}
+                    {member.zone && !isStationRole(member.user_roles[0]?.role) && (member.user_roles[0]?.role === 'waiter' || member.user_roles[0]?.role === 'event_manager') && (
                       <Badge 
                         variant="outline"
                         style={{ borderColor: member.zone.color, color: member.zone.color }}
@@ -1020,8 +1020,8 @@ export function AdminStaff() {
               </Select>
             </div>
 
-            {/* Event assignment for waiter and station roles */}
-            {(editForm.role === 'waiter' || isStationRole(editForm.role)) && (
+            {/* Event assignment for waiter, event manager, and station roles */}
+            {(editForm.role === 'waiter' || editForm.role === 'event_manager' || isStationRole(editForm.role)) && (
               <div className="space-y-2">
                 <Label htmlFor="editEvent">Assigned Event</Label>
                 <Select
@@ -1043,14 +1043,16 @@ export function AdminStaff() {
                 <p className="text-xs text-muted-foreground">
                   {editForm.role === 'waiter' 
                     ? 'Waiters will only see this event when creating orders'
+                    : editForm.role === 'event_manager'
+                    ? 'Event managers will manage operations for this event'
                     : 'Station staff will only operate within this event'
                   }
                 </p>
               </div>
             )}
 
-            {/* Waiter-specific: Single zone assignment */}
-            {editForm.role === 'waiter' && (
+            {/* Waiter and Event Manager: Single zone assignment */}
+            {(editForm.role === 'waiter' || editForm.role === 'event_manager') && (
               <div className="space-y-2">
                 <Label htmlFor="editZone">Assigned Zone</Label>
                 <Select
@@ -1061,7 +1063,7 @@ export function AdminStaff() {
                     <SelectValue placeholder="No zone assigned" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No zone assigned (all tables)</SelectItem>
+                    <SelectItem value="none">No zone assigned (all zones)</SelectItem>
                     {filteredZones.map((zone) => (
                       <SelectItem key={zone.id} value={zone.id}>
                         <div className="flex items-center gap-2">
@@ -1078,7 +1080,9 @@ export function AdminStaff() {
                 <p className="text-xs text-muted-foreground">
                   {filteredZones.length === 0 && editForm.eventId !== 'none'
                     ? 'No zones available for the selected event'
-                    : 'Waiters will only see tables in their assigned zone'
+                    : editForm.role === 'waiter'
+                    ? 'Waiters will only see tables in their assigned zone'
+                    : 'Event managers will manage operations in this zone'
                   }
                 </p>
               </div>
