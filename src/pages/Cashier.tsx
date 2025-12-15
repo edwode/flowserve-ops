@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight, Eye, EyeOff, Layers, CheckSquare, Square } from "lucide-react";
+import { Loader2, LogOut, DollarSign, AlertTriangle, Split, Printer, ChevronDown, ChevronRight, Eye, EyeOff, Layers, CheckSquare, Square, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -873,6 +874,39 @@ const Cashier = () => {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show warning if no zones assigned
+  if (userZoneIds.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <h1 className="text-xl font-bold">Cashier Station</h1>
+              <p className="text-sm text-muted-foreground">
+                {userName || 'Cashier'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <NotificationBell />
+              <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="p-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>No Zones Assigned</AlertTitle>
+            <AlertDescription>
+              You have not been assigned to any zones. Please contact your administrator to assign you to zones in Staff &amp; Roles settings before you can process payments.
+            </AlertDescription>
+          </Alert>
+        </div>
       </div>
     );
   }
