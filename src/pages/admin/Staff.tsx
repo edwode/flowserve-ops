@@ -74,6 +74,9 @@ const ASSIGNABLE_ROLES = ROLES.filter(r => r.value !== 'tenant_admin');
 // Station roles that support multi-zone assignment
 const STATION_ROLES = ['cashier', 'bar_staff', 'mixologist', 'drink_dispenser', 'meal_dispenser'];
 
+// All roles that support multi-zone assignment (station roles + event_manager)
+const MULTI_ZONE_ROLES = [...STATION_ROLES, 'event_manager'];
+
 export function AdminStaff() {
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -419,8 +422,8 @@ export function AdminStaff() {
         if (unassignError) console.error("Error unassigning tables:", unassignError);
       }
 
-      // Handle zone assignments for station roles
-      if (STATION_ROLES.includes(editForm.role)) {
+      // Handle zone assignments for multi-zone roles (station roles + event_manager)
+      if (MULTI_ZONE_ROLES.includes(editForm.role)) {
         // Get current zone assignments
         const currentZoneIds = (editingMember.zone_assignments || []).map(za => za.zone_id);
         
@@ -475,7 +478,7 @@ export function AdminStaff() {
           }
         }
       } else {
-        // If not a station role, remove any existing zone assignments
+        // If not a multi-zone role, remove any existing zone assignments
         const { error: deleteError } = await supabase
           .from('zone_role_assignments')
           .delete()
@@ -666,6 +669,7 @@ export function AdminStaff() {
   };
 
   const isStationRole = (role: string) => STATION_ROLES.includes(role);
+  const isMultiZoneRole = (role: string) => MULTI_ZONE_ROLES.includes(role);
 
   const handleZoneToggle = (zoneId: string) => {
     setSelectedZones(prev => 
@@ -677,7 +681,7 @@ export function AdminStaff() {
 
   // Get zones with conflicts (another user has the same role in that zone)
   const getZoneConflicts = () => {
-    if (!editingMember || !isStationRole(editForm.role)) return [];
+    if (!editingMember || !isMultiZoneRole(editForm.role)) return [];
     
     const conflicts: { zoneName: string; userName: string }[] = [];
     
@@ -916,8 +920,8 @@ export function AdminStaff() {
                       </Badge>
                     ))}
                     
-                    {/* Show single zone for waiters and event managers */}
-                    {member.zone && !isStationRole(member.user_roles[0]?.role) && (member.user_roles[0]?.role === 'waiter' || member.user_roles[0]?.role === 'event_manager') && (
+                    {/* Show single zone for waiters only */}
+                    {member.zone && member.user_roles[0]?.role === 'waiter' && (
                       <Badge 
                         variant="outline"
                         style={{ borderColor: member.zone.color, color: member.zone.color }}
@@ -926,8 +930,8 @@ export function AdminStaff() {
                       </Badge>
                     )}
                     
-                    {/* Show multiple zones for station roles */}
-                    {isStationRole(member.user_roles[0]?.role) && member.zone_assignments && member.zone_assignments.length > 0 && (
+                    {/* Show multiple zones for station roles and event managers */}
+                    {isMultiZoneRole(member.user_roles[0]?.role) && member.zone_assignments && member.zone_assignments.length > 0 && (
                       <div className="flex items-center gap-1 flex-wrap">
                         <MapPin className="h-3 w-3 text-muted-foreground" />
                         {member.zone_assignments.map((za) => (
@@ -1051,8 +1055,8 @@ export function AdminStaff() {
               </div>
             )}
 
-            {/* Waiter and Event Manager: Single zone assignment */}
-            {(editForm.role === 'waiter' || editForm.role === 'event_manager') && (
+            {/* Waiter: Single zone assignment */}
+            {editForm.role === 'waiter' && (
               <div className="space-y-2">
                 <Label htmlFor="editZone">Assigned Zone</Label>
                 <Select
@@ -1080,9 +1084,7 @@ export function AdminStaff() {
                 <p className="text-xs text-muted-foreground">
                   {filteredZones.length === 0 && editForm.eventId !== 'none'
                     ? 'No zones available for the selected event'
-                    : editForm.role === 'waiter'
-                    ? 'Waiters will only see tables in their assigned zone'
-                    : 'Event managers will manage operations in this zone'
+                    : 'Waiters will only see tables in their assigned zone'
                   }
                 </p>
               </div>
@@ -1159,8 +1161,8 @@ export function AdminStaff() {
               </div>
             )}
 
-            {/* Station roles: Multi-zone assignment */}
-            {isStationRole(editForm.role) && (
+            {/* Station roles and Event Manager: Multi-zone assignment */}
+            {isMultiZoneRole(editForm.role) && (
               <div className="space-y-2">
                 <Label>Assigned Zones</Label>
                 <p className="text-xs text-muted-foreground mb-2">
