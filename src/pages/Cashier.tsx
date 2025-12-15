@@ -280,8 +280,8 @@ const Cashier = () => {
   }, [consolidatedGroups.length]);
 
   // Fetch user's assigned zones
-  const fetchUserZones = async () => {
-    if (!user || !tenantId) return;
+  const fetchUserZones = async (): Promise<string[]> => {
+    if (!user || !tenantId) return [];
     
     try {
       const { data, error } = await supabase
@@ -306,8 +306,8 @@ const Cashier = () => {
 
   useEffect(() => {
     if (!authLoading && user && tenantId) {
-      fetchUserZones().then(() => {
-        fetchData();
+      fetchUserZones().then((zoneIds) => {
+        fetchData(zoneIds);
       });
     }
   }, [authLoading, user, tenantId]);
@@ -346,15 +346,17 @@ const Cashier = () => {
     };
   }, [userZoneIds]);
 
-  const fetchData = async () => {
-    await Promise.all([fetchOrders(), fetchReturns(), fetchConsolidatedPayments()]);
+  const fetchData = async (zoneIds?: string[]) => {
+    const zones = zoneIds || userZoneIds;
+    await Promise.all([fetchOrders(showPaidOrders, zones), fetchReturns(zones), fetchConsolidatedPayments(zones)]);
     setLoading(false);
   };
 
-  const fetchOrders = async (includePaid = showPaidOrders) => {
+  const fetchOrders = async (includePaid = showPaidOrders, zoneIds?: string[]) => {
+    const zones = zoneIds || userZoneIds;
     try {
       // If no zones assigned, don't fetch orders
-      if (userZoneIds.length === 0) {
+      if (zones.length === 0) {
         setOrders([]);
         return;
       }
@@ -363,7 +365,7 @@ const Cashier = () => {
       const { data: tablesData, error: tablesError } = await supabase
         .from('tables')
         .select('table_number')
-        .in('zone_id', userZoneIds);
+        .in('zone_id', zones);
 
       if (tablesError) throw tablesError;
 
@@ -435,8 +437,24 @@ const Cashier = () => {
     }
   };
 
-  const fetchReturns = async () => {
+  const fetchReturns = async (zoneIds?: string[]) => {
+    const zones = zoneIds || userZoneIds;
     try {
+      if (zones.length === 0) {
+        setReturns([]);
+        return;
+      }
+
+      // First get tables in the user's assigned zones
+      const { data: tablesData, error: tablesError } = await supabase
+        .from('tables')
+        .select('table_number')
+        .in('zone_id', zones);
+
+      if (tablesError) throw tablesError;
+
+      const tablesInZones = new Set(tablesData?.map(t => t.table_number) || []);
+
       const { data, error } = await supabase
         .from('order_returns')
         .select(`
@@ -457,7 +475,14 @@ const Cashier = () => {
         .order('confirmed_at', { ascending: false });
 
       if (error) throw error;
-      setReturns(data || []);
+      
+      // Filter returns to only those from tables in the cashier's zones
+      const filteredReturns = (data || []).filter(returnItem => {
+        const tableNumber = (returnItem.order_items as any)?.orders?.table_number;
+        return tableNumber && tablesInZones.has(tableNumber);
+      });
+      
+      setReturns(filteredReturns);
     } catch (error: any) {
       toast({
         title: "Error loading returns",
@@ -467,8 +492,24 @@ const Cashier = () => {
     }
   };
 
-  const fetchConsolidatedPayments = async () => {
+  const fetchConsolidatedPayments = async (zoneIds?: string[]) => {
+    const zones = zoneIds || userZoneIds;
     try {
+      if (zones.length === 0) {
+        setConsolidatedGroups([]);
+        return;
+      }
+
+      // First get tables in the user's assigned zones
+      const { data: tablesData, error: tablesError } = await supabase
+        .from('tables')
+        .select('table_number')
+        .in('zone_id', zones);
+
+      if (tablesError) throw tablesError;
+
+      const tablesInZones = new Set(tablesData?.map(t => t.table_number) || []);
+
       // Fetch payments with consolidated notes
       const { data: paymentsData, error: paymentsError } = await supabase
         .from('payments')
@@ -505,6 +546,8 @@ const Cashier = () => {
       
       (paymentsData || []).forEach((payment: any) => {
         if (!payment.orders) return;
+        // Filter to only orders from tables in the cashier's zones
+        if (!tablesInZones.has(payment.orders.table_number)) return;
         
         const paidAt = payment.orders.paid_at || payment.created_at;
         const tableNumber = payment.orders.table_number || 'N/A';
