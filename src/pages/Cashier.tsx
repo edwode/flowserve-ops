@@ -127,6 +127,8 @@ const Cashier = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [showConsolidatedDialog, setShowConsolidatedDialog] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
+  const [userZoneNames, setUserZoneNames] = useState<string[]>([]);
 
   // Fetch user profile name
   useEffect(() => {
@@ -276,10 +278,41 @@ const Cashier = () => {
     }
   }, [consolidatedGroups.length]);
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      fetchData();
+  // Fetch user's assigned zones
+  const fetchUserZones = async () => {
+    if (!user || !tenantId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('zone_role_assignments')
+        .select('zone_id, zones(name)')
+        .eq('user_id', user.id)
+        .eq('tenant_id', tenantId)
+        .eq('role', 'cashier');
+
+      if (error) throw error;
+
+      const zoneIds = data?.map(d => d.zone_id) || [];
+      const zoneNames = data?.map(d => (d.zones as any)?.name).filter(Boolean) || [];
+      setUserZoneIds(zoneIds);
+      setUserZoneNames(zoneNames);
+      return zoneIds;
+    } catch (error: any) {
+      console.error("Error fetching user zones:", error.message);
+      return [];
     }
+  };
+
+  useEffect(() => {
+    if (!authLoading && user && tenantId) {
+      fetchUserZones().then(() => {
+        fetchData();
+      });
+    }
+  }, [authLoading, user, tenantId]);
+
+  useEffect(() => {
+    if (userZoneIds.length === 0) return;
     
     const channel = supabase
       .channel('cashier-updates')
@@ -310,7 +343,7 @@ const Cashier = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authLoading, user]);
+  }, [userZoneIds]);
 
   const fetchData = async () => {
     await Promise.all([fetchOrders(), fetchReturns(), fetchConsolidatedPayments()]);
@@ -319,6 +352,22 @@ const Cashier = () => {
 
   const fetchOrders = async (includePaid = showPaidOrders) => {
     try {
+      // If no zones assigned, don't fetch orders
+      if (userZoneIds.length === 0) {
+        setOrders([]);
+        return;
+      }
+
+      // First get tables in the user's assigned zones
+      const { data: tablesData, error: tablesError } = await supabase
+        .from('tables')
+        .select('table_number')
+        .in('zone_id', userZoneIds);
+
+      if (tablesError) throw tablesError;
+
+      const tablesInZones = new Set(tablesData?.map(t => t.table_number) || []);
+
       const statusFilter: ("served" | "ready" | "paid")[] = includePaid 
         ? ['served', 'ready', 'paid'] 
         : ['served', 'ready'];
@@ -350,6 +399,8 @@ const Cashier = () => {
       
       // Transform the data to match our Order interface and filter out returned items
       const transformedData = (data || [])
+        // Filter to only orders from tables in the cashier's zones
+        .filter(order => order.table_number && tablesInZones.has(order.table_number))
         .map(order => {
           const nonReturnedItems = order.order_items
             ?.filter(item => item.status !== 'returned')
@@ -834,7 +885,9 @@ const Cashier = () => {
           <div>
             <h1 className="text-xl font-bold">Cashier Station</h1>
             <p className="text-sm text-muted-foreground">
-              {userName ? `${userName} • ` : ''}{orders.length} pending payments
+              {userName ? `${userName} • ` : ''}
+              {userZoneNames.length > 0 ? `${userZoneNames.join(', ')} • ` : ''}
+              {orders.length} pending payments
             </p>
           </div>
           <div className="flex items-center gap-2">
