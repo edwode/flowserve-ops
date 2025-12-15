@@ -13,18 +13,16 @@ import { FloorMap } from "@/components/FloorMap";
 import { CriticalAlerts } from "@/components/CriticalAlerts";
 import { LiveOrderTracking } from "@/components/LiveOrderTracking";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface Event {
   id: string;
   name: string;
   event_date: string;
+}
+
+interface Zone {
+  id: string;
+  name: string;
 }
 
 interface OrderStats {
@@ -63,23 +61,68 @@ const Manager = () => {
   const { toast } = useToast();
   const { user, tenantId, loading: authLoading } = useAuthGuard();
   const [loading, setLoading] = useState(true);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<string>("");
+  const [assignedEvent, setAssignedEvent] = useState<Event | null>(null);
+  const [assignedZones, setAssignedZones] = useState<Zone[]>([]);
   const [userName, setUserName] = useState<string | null>(null);
 
-  // Fetch user profile name
+  // Fetch user profile and assigned event/zones
   useEffect(() => {
-    const fetchUserName = async () => {
-      if (!user) return;
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-      if (data?.full_name) setUserName(data.full_name);
+    const fetchUserAssignments = async () => {
+      if (!user || !tenantId) return;
+
+      try {
+        // Fetch profile with assigned event
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, event_id')
+          .eq('id', user.id)
+          .single();
+
+        if (profile?.full_name) setUserName(profile.full_name);
+
+        // Fetch assigned zones from zone_role_assignments
+        const { data: zoneAssignments } = await supabase
+          .from('zone_role_assignments')
+          .select('zone_id, zones(id, name)')
+          .eq('user_id', user.id)
+          .eq('role', 'event_manager');
+
+        if (zoneAssignments && zoneAssignments.length > 0) {
+          const zones = zoneAssignments
+            .map((za: any) => za.zones)
+            .filter(Boolean) as Zone[];
+          setAssignedZones(zones);
+        }
+
+        // Fetch assigned event details
+        if (profile?.event_id) {
+          const { data: eventData } = await supabase
+            .from('events')
+            .select('id, name, event_date')
+            .eq('id', profile.event_id)
+            .single();
+
+          if (eventData) {
+            setAssignedEvent(eventData);
+          }
+        }
+      } catch (error: any) {
+        console.error("Error fetching user assignments:", error);
+        toast({
+          title: "Error loading assignments",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchUserName();
-  }, [user]);
+
+    if (!authLoading && user && tenantId) {
+      fetchUserAssignments();
+    }
+  }, [authLoading, user, tenantId]);
+
   const [orderStats, setOrderStats] = useState<OrderStats>({
     pending: 0,
     dispatched: 0,
@@ -98,13 +141,7 @@ const Manager = () => {
   });
 
   useEffect(() => {
-    if (!authLoading && user) {
-      fetchEvents();
-    }
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    if (selectedEvent) {
+    if (assignedEvent && assignedZones.length > 0) {
       fetchDashboardData();
       
       // Set up real-time subscriptions
@@ -155,32 +192,9 @@ const Manager = () => {
         clearInterval(interval);
       };
     }
-  }, [selectedEvent]);
+  }, [assignedEvent, assignedZones]);
 
-  const fetchEvents = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('id, name, event_date')
-        .eq('is_active', true)
-        .order('event_date', { ascending: false });
-
-      if (error) throw error;
-      setEvents(data || []);
-      
-      if (data && data.length > 0) {
-        setSelectedEvent(data[0].id);
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error loading events",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const zoneIds = assignedZones.map(z => z.id);
 
   const fetchDashboardData = async () => {
     await Promise.all([
@@ -192,11 +206,28 @@ const Manager = () => {
   };
 
   const fetchOrderStats = async () => {
+    if (!assignedEvent || zoneIds.length === 0) return;
+    
     try {
+      // Get tables in assigned zones first
+      const { data: zoneTables } = await supabase
+        .from('tables')
+        .select('table_number')
+        .eq('event_id', assignedEvent.id)
+        .in('zone_id', zoneIds);
+
+      const tableNumbers = zoneTables?.map(t => t.table_number) || [];
+      
+      if (tableNumbers.length === 0) {
+        setOrderStats({ pending: 0, dispatched: 0, ready: 0, served: 0, paid: 0 });
+        return;
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select('status')
-        .eq('event_id', selectedEvent);
+        .eq('event_id', assignedEvent.id)
+        .in('table_number', tableNumbers);
 
       if (error) throw error;
 
@@ -221,7 +252,23 @@ const Manager = () => {
   };
 
   const fetchStationStats = async () => {
+    if (!assignedEvent || zoneIds.length === 0) return;
+    
     try {
+      // Get tables in assigned zones first
+      const { data: zoneTables } = await supabase
+        .from('tables')
+        .select('table_number')
+        .eq('event_id', assignedEvent.id)
+        .in('zone_id', zoneIds);
+
+      const tableNumbers = zoneTables?.map(t => t.table_number) || [];
+      
+      if (tableNumbers.length === 0) {
+        setStationStats([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('order_items')
         .select(`
@@ -229,9 +276,10 @@ const Manager = () => {
           status,
           created_at,
           ready_at,
-          orders!inner (event_id)
+          orders!inner (event_id, table_number)
         `)
-        .eq('orders.event_id', selectedEvent);
+        .eq('orders.event_id', assignedEvent.id)
+        .in('orders.table_number', tableNumbers);
 
       if (error) throw error;
 
@@ -277,12 +325,30 @@ const Manager = () => {
   };
 
   const fetchOutOfStock = async () => {
+    if (!assignedEvent || zoneIds.length === 0) return;
+    
     try {
-      const { data, error } = await supabase
+      // Get menu items for the event that are allocated to assigned zones
+      const { data: zoneAllocations } = await supabase
+        .from('inventory_zone_allocations')
+        .select('menu_item_id')
+        .eq('event_id', assignedEvent.id)
+        .in('zone_id', zoneIds);
+
+      const menuItemIds = zoneAllocations?.map(za => za.menu_item_id) || [];
+
+      // If no zone allocations, fall back to event-level menu items
+      let query = supabase
         .from('menu_items')
         .select('id, name, category, station_type')
-        .eq('event_id', selectedEvent)
+        .eq('event_id', assignedEvent.id)
         .eq('is_available', false);
+
+      if (menuItemIds.length > 0) {
+        query = query.in('id', menuItemIds);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setOutOfStock(data || []);
@@ -292,11 +358,34 @@ const Manager = () => {
   };
 
   const fetchMetrics = async () => {
+    if (!assignedEvent || zoneIds.length === 0) return;
+    
     try {
+      // Get tables in assigned zones first
+      const { data: zoneTables } = await supabase
+        .from('tables')
+        .select('table_number')
+        .eq('event_id', assignedEvent.id)
+        .in('zone_id', zoneIds);
+
+      const tableNumbers = zoneTables?.map(t => t.table_number) || [];
+      
+      if (tableNumbers.length === 0) {
+        setMetrics({
+          avgOrderToReady: 0,
+          avgOrderToServed: 0,
+          avgOrderToPaid: 0,
+          totalOrders: 0,
+          totalRevenue: 0,
+        });
+        return;
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select('created_at, ready_at, served_at, paid_at, total_amount')
-        .eq('event_id', selectedEvent);
+        .eq('event_id', assignedEvent.id)
+        .in('table_number', tableNumbers);
 
       if (error) throw error;
 
@@ -365,13 +454,34 @@ const Manager = () => {
     );
   }
 
+  // Show message if no event or zones assigned
+  if (!assignedEvent || assignedZones.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
+        <h1 className="text-xl font-bold mb-2">No Assignments Found</h1>
+        <p className="text-muted-foreground text-center mb-4">
+          You have not been assigned to an event or zones yet. Please contact your admin.
+        </p>
+        <Button onClick={handleSignOut} variant="outline">
+          <LogOut className="h-4 w-4 mr-2" />
+          Sign Out
+        </Button>
+      </div>
+    );
+  }
+
   const totalActive = orderStats.pending + orderStats.dispatched + orderStats.ready + orderStats.served;
 
   return (
     <div className="min-h-screen bg-background">
       {/* Critical Alerts Overlay */}
-      {selectedEvent && tenantId && (
-        <CriticalAlerts eventId={selectedEvent} tenantId={tenantId} />
+      {assignedEvent && tenantId && (
+        <CriticalAlerts 
+          eventId={assignedEvent.id} 
+          tenantId={tenantId} 
+          zoneIds={zoneIds}
+        />
       )}
 
       {/* Header */}
@@ -383,19 +493,15 @@ const Manager = () => {
               <h1 className="text-xl font-bold">
                 {userName ? `${userName}'s Dashboard` : 'Real-Time Dashboard'}
               </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                  <SelectTrigger className="w-[250px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {events.map(event => (
-                      <SelectItem key={event.id} value={event.id}>
-                        {event.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <Badge variant="outline" className="font-medium">
+                  {assignedEvent.name}
+                </Badge>
+                {assignedZones.map(zone => (
+                  <Badge key={zone.id} variant="secondary" className="text-xs">
+                    {zone.name}
+                  </Badge>
+                ))}
                 <Badge variant="secondary" className="text-xs animate-pulse">
                   Live
                 </Badge>
@@ -580,14 +686,18 @@ const Manager = () => {
 
         {/* Live Orders Tab */}
         <TabsContent value="live-orders" className="mt-4">
-          {selectedEvent && tenantId && (
-            <LiveOrderTracking eventId={selectedEvent} tenantId={tenantId} />
+          {assignedEvent && tenantId && (
+            <LiveOrderTracking 
+              eventId={assignedEvent.id} 
+              tenantId={tenantId} 
+              zoneIds={zoneIds}
+            />
           )}
         </TabsContent>
 
         {/* Floor Map Tab */}
         <TabsContent value="floor-map" className="mt-4">
-          {selectedEvent && tenantId && (
+          {assignedEvent && tenantId && (
             <Card className="p-6">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -595,10 +705,10 @@ const Manager = () => {
                   Staff Location Tracking
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Real-time positions of active staff members
+                  Real-time positions of active staff members in your zones
                 </p>
               </div>
-              <FloorMap eventId={selectedEvent} tenantId={tenantId} />
+              <FloorMap eventId={assignedEvent.id} tenantId={tenantId} />
             </Card>
           )}
         </TabsContent>
