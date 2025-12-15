@@ -654,7 +654,7 @@ export default function Analytics() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatPrice(totalRevenue)}</div>
             <p className="text-xs text-muted-foreground">
               {dateRange} days period
             </p>
@@ -678,7 +678,7 @@ export default function Analytics() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${avgOrderValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatPrice(avgOrderValue)}</div>
             <p className="text-xs text-muted-foreground">Per order</p>
           </CardContent>
         </Card>
@@ -689,7 +689,7 @@ export default function Analytics() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${forecastRevenue().toFixed(0)}</div>
+            <div className="text-2xl font-bold">{formatPrice(forecastRevenue())}</div>
             <p className="text-xs text-muted-foreground">Projected revenue</p>
           </CardContent>
         </Card>
@@ -716,7 +716,7 @@ export default function Analytics() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip formatter={(value: number) => formatPrice(value)} />
                     <Legend />
                     <Line
                       type="monotone"
@@ -747,7 +747,7 @@ export default function Analytics() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="hour" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip formatter={(value: number, name: string) => name === 'Revenue' ? formatPrice(value) : value} />
                     <Legend />
                     <Bar dataKey="orders" fill="#8884d8" name="Orders" />
                   </BarChart>
@@ -776,7 +776,7 @@ export default function Analytics() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value: number) => formatPrice(value)} />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -832,7 +832,7 @@ export default function Analytics() {
                     <div className="text-right">
                       <p className="font-bold">{item.total_quantity} sold</p>
                       <p className="text-sm text-muted-foreground">
-                        ${parseFloat(item.total_revenue).toFixed(2)} revenue
+                        {formatPrice(parseFloat(item.total_revenue))} revenue
                       </p>
                     </div>
                   </div>
@@ -861,13 +861,13 @@ export default function Analytics() {
                       <div>
                         <p className="font-semibold">{waiter.waiter_name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {waiter.total_orders} orders • ${parseFloat(waiter.total_revenue).toFixed(2)} revenue
+                          {waiter.total_orders} orders • {formatPrice(parseFloat(waiter.total_revenue))} revenue
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="font-bold">
-                        ${parseFloat(waiter.avg_order_value).toFixed(2)}
+                        {formatPrice(parseFloat(waiter.avg_order_value))}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         Avg order • {parseFloat(waiter.avg_table_turnover_minutes).toFixed(0)}m turnover
