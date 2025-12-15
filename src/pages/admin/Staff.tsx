@@ -440,8 +440,21 @@ export function AdminStaff() {
           if (deleteError) throw deleteError;
         }
 
-        // Add new assignments
+        // Add new assignments - first delete any conflicting assignments from other users
         for (const zoneId of zonesToAdd) {
+          // Delete existing assignment for this zone+role (from any other user)
+          const { error: deleteConflictError } = await supabase
+            .from('zone_role_assignments')
+            .delete()
+            .eq('zone_id', zoneId)
+            .eq('role', editForm.role as any)
+            .neq('user_id', editingMember.id);
+          
+          if (deleteConflictError) {
+            console.error("Error removing conflicting assignment:", deleteConflictError);
+          }
+
+          // Now insert the new assignment
           const { error: insertError } = await supabase
             .from('zone_role_assignments')
             .insert({
@@ -452,17 +465,13 @@ export function AdminStaff() {
             });
           
           if (insertError) {
-            // Check if it's a unique constraint violation (another user already has this role in this zone)
-            if (insertError.code === '23505') {
-              const zone = zones.find(z => z.id === zoneId);
-              toast({
-                title: "Zone assignment conflict",
-                description: `Another ${editForm.role.replace(/_/g, ' ')} is already assigned to ${zone?.name || 'this zone'}`,
-                variant: "destructive",
-              });
-            } else {
-              throw insertError;
-            }
+            const zone = zones.find(z => z.id === zoneId);
+            toast({
+              title: "Zone assignment error",
+              description: `Failed to assign ${editForm.role.replace(/_/g, ' ')} to ${zone?.name || 'this zone'}`,
+              variant: "destructive",
+            });
+            throw insertError;
           }
         }
       } else {
