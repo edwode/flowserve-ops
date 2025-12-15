@@ -1151,10 +1151,13 @@ export function AdminStaff() {
               <div className="space-y-2">
                 <Label>Assigned Zones</Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Select zones where this {editForm.role.replace(/_/g, ' ')} will operate. Only one {editForm.role.replace(/_/g, ' ')} can be assigned per zone.
+                  {editForm.eventId === 'none' 
+                    ? 'Please select an event first to see available zones.'
+                    : `Select zones where this ${editForm.role.replace(/_/g, ' ')} will operate. Only one ${editForm.role.replace(/_/g, ' ')} can be assigned per zone.`
+                  }
                 </p>
                 
-                {filteredZones.length > 0 ? (
+                {editForm.eventId !== 'none' && filteredZones.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
                     {filteredZones.map((zone) => (
                       <div key={zone.id} className="flex items-center space-x-2">
@@ -1178,9 +1181,9 @@ export function AdminStaff() {
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">
-                    {editForm.eventId !== 'none' 
-                      ? 'No zones available for the selected event. Create zones in the Tables section first.'
-                      : 'No zones available. Create zones in the Tables section first.'
+                    {editForm.eventId === 'none' 
+                      ? 'Select an event above to see and assign zones.'
+                      : 'No zones available for the selected event. Create zones in the Tables section first.'
                     }
                   </p>
                 )}
