@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Clock, Package, X } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AlertTriangle, Bell, ChevronDown, ChevronUp, Clock, Package, RefreshCw, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface CriticalAlert {
@@ -25,6 +26,9 @@ interface CriticalAlertsProps {
 export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsProps) => {
   const [alerts, setAlerts] = useState<CriticalAlert[]>([]);
   const [tableNumbers, setTableNumbers] = useState<string[]>([]);
+  const [isOpen, setIsOpen] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   // Fetch tables in assigned zones
   useEffect(() => {
@@ -90,7 +94,6 @@ export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsPro
     const newAlerts: CriticalAlert[] = [];
 
     // Check for delayed orders (>15 minutes in pending/dispatched)
-    // Filter by tables in assigned zones if zoneIds provided
     let delayedOrdersQuery = supabase
       .from('order_items')
       .select(`
@@ -104,11 +107,9 @@ export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsPro
       .in('status', ['pending', 'dispatched'])
       .lt('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString());
 
-    // If zone filtering is enabled and we have table numbers
     if (zoneIds && zoneIds.length > 0 && tableNumbers.length > 0) {
       delayedOrdersQuery = delayedOrdersQuery.in('orders.table_number', tableNumbers);
     } else if (zoneIds && zoneIds.length > 0 && tableNumbers.length === 0) {
-      // No tables in assigned zones, skip delayed order check
       setAlerts([]);
       return;
     }
@@ -137,7 +138,6 @@ export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsPro
       .eq('event_id', eventId)
       .eq('is_available', false);
 
-    // If zone filtering, get menu items allocated to those zones
     if (zoneIds && zoneIds.length > 0) {
       const { data: zoneAllocations } = await supabase
         .from('inventory_zone_allocations')
@@ -167,7 +167,7 @@ export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsPro
       });
     }
 
-    // Check for recent returns - filter by tables in assigned zones
+    // Check for recent returns
     let returnsQuery = supabase
       .from('order_returns')
       .select(`
@@ -187,7 +187,6 @@ export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsPro
     if (zoneIds && zoneIds.length > 0 && tableNumbers.length > 0) {
       returnsQuery = returnsQuery.in('order_items.orders.table_number', tableNumbers);
     } else if (zoneIds && zoneIds.length > 0 && tableNumbers.length === 0) {
-      // No tables in assigned zones, no returns to show
       setAlerts(newAlerts);
       return;
     }
@@ -208,77 +207,167 @@ export const CriticalAlerts = ({ eventId, tenantId, zoneIds }: CriticalAlertsPro
       });
     }
 
+    // Filter out dismissed alerts, but only keep dismissals for alerts that still exist
+    const newAlertIds = new Set(newAlerts.map(a => a.id));
+    setDismissedIds(prev => {
+      const validDismissed = new Set<string>();
+      prev.forEach(id => {
+        if (newAlertIds.has(id)) {
+          validDismissed.add(id);
+        }
+      });
+      return validDismissed;
+    });
+
     setAlerts(newAlerts);
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await checkForAlerts();
+    setIsRefreshing(false);
+  };
+
   const dismissAlert = (id: string) => {
-    setAlerts(alerts.filter(a => a.id !== id));
+    setDismissedIds(prev => new Set(prev).add(id));
+  };
+
+  const dismissAll = () => {
+    setDismissedIds(new Set(alerts.map(a => a.id)));
   };
 
   const getAlertIcon = (type: string) => {
     switch (type) {
       case 'delayed_order':
-        return <Clock className="w-5 h-5" />;
+        return <Clock className="w-4 h-4 shrink-0" />;
       case 'out_of_stock':
-        return <Package className="w-5 h-5" />;
+        return <Package className="w-4 h-4 shrink-0" />;
       case 'return':
-        return <AlertTriangle className="w-5 h-5" />;
+        return <AlertTriangle className="w-4 h-4 shrink-0" />;
       default:
-        return <AlertTriangle className="w-5 h-5" />;
+        return <AlertTriangle className="w-4 h-4 shrink-0" />;
     }
   };
 
-  const getAlertVariant = (severity: string) => {
-    if (severity === 'high') return 'destructive';
-    return 'default';
+  const getSeverityColor = (severity: string) => {
+    if (severity === 'high') return 'bg-destructive/10 border-destructive/30 text-destructive';
+    return 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400';
   };
 
-  if (alerts.length === 0) return null;
+  // Filter out dismissed alerts for display
+  const visibleAlerts = alerts.filter(a => !dismissedIds.has(a.id));
+  const highSeverityCount = visibleAlerts.filter(a => a.severity === 'high').length;
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md space-y-2 animate-slide-in-right">
-      {alerts.slice(0, 5).map((alert) => (
-        <Alert
-          key={alert.id}
-          variant={getAlertVariant(alert.severity)}
-          className="shadow-xl border-2 animate-fade-in backdrop-blur-sm bg-background/95"
-        >
-          <div className="flex items-start gap-3">
-            {getAlertIcon(alert.type)}
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center justify-between">
-                <AlertTitle className="text-sm font-bold">{alert.title}</AlertTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => dismissAlert(alert.id)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-              <AlertDescription className="text-xs">
-                {alert.message}
-              </AlertDescription>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge variant="outline" className="text-xs">
-                  {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
-                </Badge>
-                {alert.severity === 'high' && (
-                  <Badge variant="destructive" className="text-xs animate-pulse">
-                    Urgent
-                  </Badge>
+    <Card className="overflow-hidden">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger asChild>
+          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Bell className={`h-5 w-5 ${highSeverityCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
+                {visibleAlerts.length > 0 && (
+                  <span className={`absolute -top-1 -right-1 h-4 w-4 rounded-full text-[10px] flex items-center justify-center text-white font-bold ${highSeverityCount > 0 ? 'bg-destructive animate-pulse' : 'bg-amber-500'}`}>
+                    {visibleAlerts.length}
+                  </span>
                 )}
               </div>
+              <div>
+                <h3 className="font-semibold text-sm">Critical Alerts</h3>
+                <p className="text-xs text-muted-foreground">
+                  {visibleAlerts.length === 0 
+                    ? 'No active alerts' 
+                    : `${visibleAlerts.length} active alert${visibleAlerts.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRefresh();
+                }}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
+              {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </div>
           </div>
-        </Alert>
-      ))}
-      {alerts.length > 5 && (
-        <p className="text-xs text-center text-muted-foreground">
-          +{alerts.length - 5} more alerts
-        </p>
-      )}
-    </div>
+        </CollapsibleTrigger>
+        
+        <CollapsibleContent>
+          <div className="border-t border-border">
+            {visibleAlerts.length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground">
+                <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">All clear! No critical alerts.</p>
+              </div>
+            ) : (
+              <>
+                {visibleAlerts.length > 1 && (
+                  <div className="px-4 py-2 border-b border-border bg-muted/30">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={dismissAll}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Dismiss All
+                    </Button>
+                  </div>
+                )}
+                <div className="max-h-[300px] overflow-y-auto">
+                  <div className="divide-y divide-border">
+                    {visibleAlerts.map((alert) => (
+                      <div
+                        key={alert.id}
+                        className={`p-3 ${getSeverityColor(alert.severity)} border-l-4 animate-fade-in`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {getAlertIcon(alert.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-sm">{alert.title}</span>
+                                {alert.severity === 'high' && (
+                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4 animate-pulse">
+                                    Urgent
+                                  </Badge>
+                                )}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 shrink-0 hover:bg-background/50"
+                                onClick={() => dismissAlert(alert.id)}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                            <p className="text-xs mt-1 opacity-90 break-words">
+                              {alert.message}
+                            </p>
+                            <span className="text-[10px] opacity-70 mt-1 block">
+                              {formatDistanceToNow(new Date(alert.timestamp), { addSuffix: true })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
   );
 };

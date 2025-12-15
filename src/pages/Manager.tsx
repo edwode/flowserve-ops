@@ -475,15 +475,6 @@ const Manager = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Critical Alerts Overlay */}
-      {assignedEvent && tenantId && (
-        <CriticalAlerts 
-          eventId={assignedEvent.id} 
-          tenantId={tenantId} 
-          zoneIds={zoneIds}
-        />
-      )}
-
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
         <div className="flex items-center justify-between p-4">
@@ -529,6 +520,15 @@ const Manager = () => {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4 mt-4">
+        {/* Critical Alerts Card */}
+        {assignedEvent && tenantId && (
+          <CriticalAlerts 
+            eventId={assignedEvent.id} 
+            tenantId={tenantId} 
+            zoneIds={zoneIds}
+          />
+        )}
+
         {/* Performance Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card className="p-4 transition-all duration-300 hover:shadow-lg animate-fade-in" style={{ animationDelay: '0.1s' }}>
