@@ -58,6 +58,11 @@ interface CartItem extends MenuItem {
   quantity: number;
 }
 
+interface ZoneAllocation {
+  menu_item_id: string;
+  allocated_quantity: number;
+}
+
 const NewOrder = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -74,6 +79,7 @@ const NewOrder = () => {
   const [usingCache, setUsingCache] = useState(false);
   const [waiterZoneId, setWaiterZoneId] = useState<string | null>(null);
   const [waiterEventId, setWaiterEventId] = useState<string | null>(null);
+  const [zoneAllocations, setZoneAllocations] = useState<ZoneAllocation[]>([]);
   
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [selectedTable, setSelectedTable] = useState("");
@@ -89,9 +95,10 @@ const NewOrder = () => {
     if (selectedEvent) {
       fetchMenuItems();
       fetchTables();
+      fetchZoneAllocations();
       setSelectedTable("");
     }
-  }, [selectedEvent]);
+  }, [selectedEvent, waiterZoneId]);
 
   const fetchData = async () => {
     if (!user) return;
@@ -229,6 +236,32 @@ const NewOrder = () => {
         });
       }
     }
+  };
+
+  const fetchZoneAllocations = async () => {
+    if (!selectedEvent || !waiterZoneId) {
+      setZoneAllocations([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('inventory_zone_allocations')
+        .select('menu_item_id, allocated_quantity')
+        .eq('event_id', selectedEvent)
+        .eq('zone_id', waiterZoneId);
+
+      if (error) throw error;
+      setZoneAllocations(data || []);
+    } catch (error: any) {
+      console.error('Error fetching zone allocations:', error);
+      setZoneAllocations([]);
+    }
+  };
+
+  const getZoneAllocation = (menuItemId: string): number | null => {
+    const allocation = zoneAllocations.find(a => a.menu_item_id === menuItemId);
+    return allocation ? allocation.allocated_quantity : null;
   };
 
   const addToCart = (item: MenuItem) => {
@@ -468,12 +501,18 @@ const NewOrder = () => {
                 <div className="space-y-2">
                   {items.map(item => {
                     const quantity = getCartItemQuantity(item.id);
+                    const zoneAllocation = getZoneAllocation(item.id);
                     return (
                       <div key={item.id} className="flex items-center justify-between gap-3 py-2">
                         <div className="flex-1">
                           <div className="font-medium">{item.name}</div>
                           <div className="text-sm text-muted-foreground">
                             {formatPrice(item.price)}
+                            {zoneAllocation !== null && (
+                              <span className="ml-2 text-primary">
+                                • {zoneAllocation} available
+                              </span>
+                            )}
                           </div>
                         </div>
                         {quantity === 0 ? (
