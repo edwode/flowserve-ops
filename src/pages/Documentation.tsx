@@ -3,10 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Database, Users, GitBranch, ArrowRightLeft, ChefHat, CreditCard, LayoutDashboard, UserPlus, LogIn, Wine, Package } from "lucide-react";
+import { ArrowLeft, Database, Users, GitBranch, ArrowRightLeft, ChefHat, CreditCard, LayoutDashboard, UserPlus, LogIn, Wine, Package, Download } from "lucide-react";
+import { generateDocumentationWord } from "@/lib/generateDocumentation";
+import { toast } from "sonner";
 
 const Documentation = () => {
   const navigate = useNavigate();
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const diagrams = [
     {
@@ -507,17 +510,42 @@ const Documentation = () => {
 
   const [activeTab, setActiveTab] = useState(diagrams[0].id);
 
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const diagramsForExport = diagrams.map(d => ({
+        id: d.id,
+        title: d.title,
+        description: d.description,
+        mermaid: d.mermaid,
+      }));
+      await generateDocumentationWord(diagramsForExport);
+      toast.success("Documentation downloaded successfully");
+    } catch (error) {
+      console.error("Error generating document:", error);
+      toast.error("Failed to generate documentation");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">System Documentation</h1>
-            <p className="text-muted-foreground">EventOpsX Architecture & Workflows</p>
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">System Documentation</h1>
+              <p className="text-muted-foreground">EventOpsX Architecture & Workflows</p>
+            </div>
           </div>
+          <Button onClick={handleDownload} disabled={isDownloading}>
+            <Download className="h-4 w-4 mr-2" />
+            {isDownloading ? "Generating..." : "Download Word"}
+          </Button>
         </div>
       </header>
 
