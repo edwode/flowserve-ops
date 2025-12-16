@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Database, Users, GitBranch, ArrowRightLeft, ChefHat, CreditCard, LayoutDashboard, UserPlus, LogIn, Wine } from "lucide-react";
+import { ArrowLeft, Database, Users, GitBranch, ArrowRightLeft, ChefHat, CreditCard, LayoutDashboard, UserPlus, LogIn, Wine, Package } from "lucide-react";
 
 const Documentation = () => {
   const navigate = useNavigate();
@@ -13,33 +13,46 @@ const Documentation = () => {
       id: "er-diagram",
       title: "Entity Relationship Diagram",
       icon: Database,
-      description: "Database structure showing relationships between all 14 tables",
+      description: "Database structure showing relationships between all 18 tables",
       mermaid: `erDiagram
     TENANT ||--o{ EVENT : hosts
     TENANT ||--o{ PROFILE : employs
     TENANT ||--o{ MENU_ITEM : defines
     TENANT ||--o{ TABLE : configures
     TENANT ||--o{ ZONE : organizes
+    TENANT ||--o{ MENU_CATEGORY : categorizes
+    TENANT ||--o{ AUDIT_LOG : tracks
     
     PROFILE ||--o{ USER_ROLE : has
+    PROFILE ||--o{ ZONE_ROLE_ASSIGNMENT : assigned_to
     PROFILE ||--o{ ORDER : creates_as_waiter
     PROFILE ||--o{ STAFF_LOCATION : tracks
+    PROFILE }o--o| ZONE : waiter_zone
+    PROFILE }o--o| EVENT : assigned_event
     
     EVENT ||--o{ ORDER : contains
     EVENT ||--o{ TABLE : uses
     EVENT ||--o{ ZONE : divides_into
     EVENT ||--o{ MENU_ITEM : offers
+    EVENT ||--o{ INVENTORY_ZONE_ALLOCATION : allocates
+    EVENT ||--o{ INVENTORY_ZONE_TRANSFER : transfers
     
     ORDER ||--o{ ORDER_ITEM : includes
     ORDER ||--o{ PAYMENT : receives
     
     ORDER_ITEM ||--o{ ORDER_RETURN : may_have
     ORDER_ITEM }o--|| MENU_ITEM : references
+    ORDER_ITEM }o--o| PROFILE : assigned_to_staff
     
     PAYMENT ||--o{ SPLIT_PAYMENT_ITEM : splits_into
     
     TABLE }o--o| ZONE : belongs_to
-    TABLE }o--o| PROFILE : assigned_to_waiter`
+    TABLE }o--o| PROFILE : assigned_to_waiter
+    
+    ZONE ||--o{ ZONE_ROLE_ASSIGNMENT : has
+    ZONE ||--o{ INVENTORY_ZONE_ALLOCATION : stores
+    
+    MENU_ITEM ||--o{ INVENTORY_ZONE_ALLOCATION : allocated_to_zones`
     },
     {
       id: "role-hierarchy",
@@ -80,13 +93,20 @@ const Documentation = () => {
     EM --> DD
     EM --> MD
     EM --> MX
-    TA --> ROP`
+    TA --> ROP
+    
+    Note1[Waiters: Single zone via profiles.zone_id]
+    Note2[Station/Manager: Multi-zone via zone_role_assignments]
+    
+    W -.-> Note1
+    C -.-> Note2
+    EM -.-> Note2`
     },
     {
       id: "order-lifecycle",
       title: "Order Lifecycle States",
       icon: GitBranch,
-      description: "7 order statuses: pending → dispatched → ready → served → paid",
+      description: "7 order statuses with inventory decrement trigger on 'served'",
       mermaid: `stateDiagram-v2
     [*] --> pending: Order Created
     pending --> dispatched: Items sent to stations
@@ -98,13 +118,19 @@ const Documentation = () => {
     dispatched --> rejected: Item unavailable
     ready --> returned: Guest returns item
     rejected --> [*]
-    returned --> [*]`
+    returned --> [*]
+    
+    note right of served
+      TRIGGER: decrement_inventory_on_served
+      - Decrements menu_items.current_inventory
+      - Decrements inventory_zone_allocations.allocated_quantity
+    end note`
     },
     {
       id: "waiter-flow",
       title: "Waiter Order Creation",
       icon: ArrowRightLeft,
-      description: "Complete flow from opening a new order to dispatching items to stations",
+      description: "Zone-filtered tables, zone inventory visibility, offline support",
       mermaid: `sequenceDiagram
     actor Waiter
     participant UI as NewOrder Page
@@ -112,12 +138,16 @@ const Documentation = () => {
     participant Station as Station Staff
     
     Waiter->>UI: Open new order
-    UI->>DB: Fetch active events
-    DB-->>UI: Events list
+    UI->>DB: Fetch waiter profile (zone_id, event_id)
+    DB-->>UI: Assigned zone & event
     
-    Waiter->>UI: Select event
-    UI->>DB: Fetch tables + menu items
-    DB-->>UI: Tables, menu by category
+    UI->>DB: Fetch tables in waiter's zone
+    Note over UI: Only assigned tables + ad-hoc tables shown
+    DB-->>UI: Filtered tables
+    
+    UI->>DB: Fetch menu items + zone allocations
+    Note over UI: Shows zone-specific inventory count
+    DB-->>UI: Menu with allocated quantities
     
     Waiter->>UI: Select table, add items to cart
     Waiter->>UI: Submit order
@@ -128,7 +158,7 @@ const Documentation = () => {
         UI->>DB: Insert order_items per station
         DB-->>UI: Success
         Note over DB,Station: Real-time subscription triggers
-        Station->>Station: Receive new order items
+        Station->>Station: Receive items (zone-filtered)
     else Offline
         UI->>UI: Queue order locally
         Note over UI: Sync when connection restored
@@ -140,20 +170,25 @@ const Documentation = () => {
       id: "station-flow",
       title: "Station Order Processing",
       icon: ChefHat,
-      description: "How station staff receive orders, mark items ready, and handle returns",
+      description: "Zone-filtered orders, staff assignment tracking, return handling",
       mermaid: `sequenceDiagram
     actor StationStaff as Station Staff
     participant Station as Station Page
     participant DB as Database
     participant Waiter
+    participant Cashier
     
     Note over Station: Real-time subscription active
-    DB->>Station: New order_item (pending)
+    Note over Station: Orders filtered by assigned zones
+    
+    DB->>Station: New order_item (zone-filtered)
     Station-->>StationStaff: Display new order
     
     alt Item Available
         StationStaff->>Station: Mark Ready
-        Station->>DB: Update status=ready, ready_at=now()
+        Station->>DB: Update status=ready
+        Station->>DB: Set assigned_to=current_user_id
+        Station->>DB: Set ready_at=now()
         DB-->>Waiter: Real-time: item ready
     else Item Out of Stock
         StationStaff->>Station: Mark Out of Stock
@@ -165,20 +200,24 @@ const Documentation = () => {
     Note over StationStaff: Handle Returns
     DB->>Station: New return request
     StationStaff->>Station: Confirm return
-    Station->>DB: Update order_return.confirmed_at`
+    Station->>DB: Update order_return.confirmed_at
+    Station->>DB: Update order_item.status=returned
+    DB-->>Cashier: Item moved to Returns tab`
     },
     {
       id: "cashier-flow",
       title: "Cashier Payment Flow",
       icon: CreditCard,
-      description: "Simple and split payments with automatic reconciliation",
+      description: "Zone-filtered orders, split payments, returns, consolidated payments",
       mermaid: `sequenceDiagram
     actor Cashier
     participant CashierUI as Cashier Page
     participant DB as Database
     
-    Cashier->>CashierUI: View pending payments
-    CashierUI->>DB: Fetch orders (status=served)
+    Cashier->>CashierUI: View Payments tab
+    CashierUI->>DB: Fetch zone_role_assignments
+    CashierUI->>DB: Fetch orders (status=served, zone-filtered)
+    Note over CashierUI: Returned items excluded from totals
     DB-->>CashierUI: Orders list
     
     Cashier->>CashierUI: Select order
@@ -190,38 +229,49 @@ const Documentation = () => {
         CashierUI->>DB: Update order status=paid
     else Split Payment
         Cashier->>CashierUI: Open split dialog
-        Cashier->>CashierUI: Configure splits
         loop For each split
             Cashier->>CashierUI: Enter amount + method
             CashierUI->>DB: Insert payment with split_session_id
             CashierUI->>DB: Insert split_payment_items
         end
-        CashierUI->>DB: Verify total = order amount
         CashierUI->>DB: Update order status=paid
+    else Consolidated Payment
+        Cashier->>CashierUI: Select multiple orders (same table)
+        Cashier->>CashierUI: Consolidate orders
+        CashierUI->>DB: Process payment for combined total
+        CashierUI->>DB: Update ALL order statuses=paid
     end
     
-    DB-->>Cashier: Payment confirmed`
+    Note over Cashier: Returns Tab
+    Cashier->>CashierUI: View Returns tab (zone-filtered)
+    Cashier->>CashierUI: Confirm Revenue Loss
+    CashierUI->>DB: Update order_return.refund_amount`
     },
     {
       id: "manager-flow",
       title: "Manager Dashboard",
       icon: LayoutDashboard,
-      description: "Real-time subscriptions, metrics, and staff location tracking",
+      description: "Zone-scoped metrics, real-time updates, staff tracking, currency formatting",
       mermaid: `sequenceDiagram
     actor Manager
     participant Dashboard as Manager Page
     participant DB as Database
     
     Manager->>Dashboard: Open dashboard
+    Dashboard->>DB: Fetch zone_role_assignments (event_manager)
+    Dashboard->>DB: Get assigned zones & event
+    
+    Dashboard->>DB: Fetch tables in assigned zones
     Dashboard->>DB: Subscribe to orders, order_items, menu_items
-    Dashboard->>DB: Fetch initial stats
+    
+    Note over Dashboard: All data zone-scoped
     
     loop Real-time Updates
-        DB->>Dashboard: Order changes
+        DB->>Dashboard: Order changes (zone-filtered)
         Dashboard->>Dashboard: Update order stats
         Dashboard->>Dashboard: Calculate station bottlenecks
         Dashboard->>Dashboard: Check critical alerts
-        Dashboard-->>Manager: Display updated metrics
+        Dashboard-->>Manager: Display metrics (tenant currency)
     end
     
     par Periodic Refresh (30s)
@@ -230,15 +280,14 @@ const Documentation = () => {
     end
     
     Manager->>Dashboard: View floor map
-    Dashboard->>DB: Fetch staff_locations
-    DB-->>Dashboard: Staff positions
+    Dashboard->>DB: Fetch staff_locations (zone-filtered)
     Dashboard-->>Manager: Display staff on map`
     },
     {
       id: "admin-staff-flow",
       title: "Admin Staff Management",
       icon: UserPlus,
-      description: "Secure staff invitation flow using edge functions",
+      description: "Staff creation, zone/event assignment, multi-zone support for station roles",
       mermaid: `sequenceDiagram
     actor Admin as Tenant Admin
     participant AdminUI as Staff Page
@@ -255,21 +304,30 @@ const Documentation = () => {
     EdgeFn-->>AdminUI: Temporary password
     AdminUI-->>Admin: Display credentials
     
-    Note over Admin: Staff uses temp password to login
+    alt Waiter Role
+        Admin->>AdminUI: Assign event & zone
+        AdminUI->>DB: Update profile.event_id, profile.zone_id
+        Admin->>AdminUI: Assign tables
+        AdminUI->>DB: Update tables.assigned_waiter_id
+    else Station/Manager Role
+        Admin->>AdminUI: Assign event
+        AdminUI->>DB: Update profile.event_id
+        Admin->>AdminUI: Select multiple zones
+        loop For each zone
+            AdminUI->>DB: Insert zone_role_assignment
+            Note over DB: Unique constraint: one role per zone
+        end
+    end
     
-    Admin->>AdminUI: Update staff role
-    AdminUI->>EdgeFn: manage-staff (update role)
-    EdgeFn->>DB: Update user_role
-    
-    Admin->>AdminUI: Deactivate staff
-    AdminUI->>EdgeFn: manage-staff (deactivate)
-    EdgeFn->>DB: Set profile.is_active=false`
+    Admin->>AdminUI: Reset password
+    AdminUI->>EdgeFn: manage-staff (reset password)
+    EdgeFn->>Auth: Update user password`
     },
     {
       id: "auth-flow",
       title: "Authentication & Routing",
       icon: LogIn,
-      description: "Authentication flow and role-based routing",
+      description: "Authentication flow with role-based routing",
       mermaid: `sequenceDiagram
     actor User
     participant Auth as /auth Page
@@ -297,7 +355,7 @@ const Documentation = () => {
         Dashboard->>User: Redirect to /waiter
     else cashier role
         Dashboard->>User: Redirect to /cashier
-    else station role
+    else station role (DD/MD/MX)
         Dashboard->>User: Redirect to /station
     else event_manager role
         Dashboard->>User: Redirect to /manager
@@ -305,96 +363,145 @@ const Documentation = () => {
         Dashboard->>User: Redirect to /admin
     else bar_staff role
         Dashboard->>User: Redirect to /bar
-    end`
+    end
+    
+    Note over User: useAuthGuard monitors session
+    Note over User: signOut uses scope='local'`
     },
     {
       id: "bar-flow",
       title: "Bar Self-Service",
       icon: Wine,
-      description: "Bar staff handle complete flow: order, preparation, and payment",
+      description: "Bar staff: order creation, preparation, waiter order handling, payment",
       mermaid: `sequenceDiagram
     actor BarStaff as Bar Staff
     participant BarUI as Bar Page
     participant DB as Database
     
     BarStaff->>BarUI: Browse menu
-    BarUI->>DB: Fetch bar menu items
+    BarUI->>DB: Fetch bar menu items (zone-filtered)
     DB-->>BarUI: Menu grouped by category
     
-    BarStaff->>BarUI: Add items to cart
-    BarStaff->>BarUI: Create order
-    BarUI->>DB: Insert order (waiter_id=self)
-    BarUI->>DB: Insert order_items
-    DB-->>BarUI: Order created
+    alt Self-Service Order
+        BarStaff->>BarUI: Add items to cart
+        BarStaff->>BarUI: Create order
+        BarUI->>DB: Insert order (waiter_id=self)
+        BarUI->>DB: Insert order_items
+        DB-->>BarUI: Order created
+    else Waiter Order (from assigned zones)
+        BarUI->>DB: Real-time: new waiter order items
+        Note over BarUI: Shows waiter name, order details
+    end
     
-    Note over BarStaff: Prepare items immediately
-    BarStaff->>BarUI: Items ready
-    BarUI->>DB: Update order_items status=ready
+    BarStaff->>BarUI: Mark individual items ready
+    BarUI->>DB: Update order_item.status=ready
+    BarUI->>DB: Set assigned_to=current_user_id
     
+    Note over BarUI: Payment only when ALL items ready
     BarStaff->>BarUI: Process payment
     BarUI->>DB: Insert payment
     BarUI->>DB: Update order status=paid
     DB-->>BarStaff: Payment confirmed`
     },
     {
+      id: "inventory-flow",
+      title: "Inventory Management",
+      icon: Package,
+      description: "Zone-based allocation, automatic decrement on serve, transfers",
+      mermaid: `sequenceDiagram
+    actor Admin as Tenant Admin
+    participant InvUI as Inventory Page
+    participant DB as Database
+    participant Trigger as DB Trigger
+    
+    Admin->>InvUI: View inventory
+    InvUI->>DB: Fetch menu_items + zone_allocations
+    DB-->>InvUI: Items with global & zone quantities
+    
+    Admin->>InvUI: Allocate to zones
+    InvUI->>DB: Insert/Update inventory_zone_allocations
+    Note over DB: Each zone has separate quantity
+    
+    Admin->>InvUI: Transfer between zones
+    InvUI->>DB: Update source zone allocation (decrease)
+    InvUI->>DB: Update target zone allocation (increase)
+    InvUI->>DB: Insert inventory_zone_transfer (audit)
+    
+    Note over Trigger: On order_item status='served'
+    Trigger->>DB: Decrement menu_items.current_inventory
+    Trigger->>DB: Decrement zone allocation (by quantity)
+    Note over Trigger: Uses GREATEST(0, qty - N)
+    
+    Admin->>InvUI: Adjust inventory
+    InvUI->>DB: Update menu_item quantities
+    InvUI->>DB: Insert audit_log entry`
+    },
+    {
       id: "complete-order-flow",
       title: "Complete Order Activity",
       icon: GitBranch,
-      description: "End-to-end order flow with all decision points",
+      description: "End-to-end order flow with zone filtering and inventory updates",
       mermaid: `graph TB
     subgraph "Waiter Actions"
-        A[Start Order] --> B[Select Event & Table]
-        B --> C[Add Menu Items]
-        C --> D{Cart Ready?}
-        D -->|No| C
-        D -->|Yes| E[Submit Order]
+        A[Start Order] --> B[Select Table from Zone]
+        B --> C[View Zone Inventory]
+        C --> D[Add Menu Items]
+        D --> E{Cart Ready?}
+        E -->|No| D
+        E -->|Yes| F[Submit Order]
     end
     
     subgraph "System Processing"
-        E --> F[Generate Order Number]
-        F --> G[Create Order Record]
-        G --> H[Dispatch Items to Stations]
+        F --> G[Generate Order Number]
+        G --> H[Create Order Record]
+        H --> I[Dispatch Items to Stations]
     end
     
     subgraph "Station Processing"
-        H --> I{Station Type}
-        I -->|Drinks| J[Drink Station]
-        I -->|Meals| K[Meal Station]
-        I -->|Cocktails| L[Mixologist]
-        I -->|Bar| M[Bar Station]
+        I --> J{Station Type}
+        J -->|Drinks| K[Drink Station]
+        J -->|Meals| L[Meal Station]
+        J -->|Cocktails| M[Mixologist]
+        J -->|Bar| N[Bar Station]
         
-        J --> N{Item Available?}
-        K --> N
-        L --> N
-        M --> N
+        K --> O{Zone Match?}
+        L --> O
+        M --> O
+        N --> O
         
-        N -->|Yes| O[Prepare Item]
-        N -->|No| P[Mark Out of Stock]
+        O -->|Yes| P{Item Available?}
+        O -->|No| SKIP[Not Shown]
         
-        O --> Q[Mark Ready]
-        P --> R[Reject Order Item]
+        P -->|Yes| Q[Prepare Item]
+        P -->|No| R[Mark Out of Stock]
+        
+        Q --> S[Mark Ready + Assign Staff]
+        R --> T[Reject Order Item]
     end
     
     subgraph "Delivery & Payment"
-        Q --> S{All Items Ready?}
-        S -->|No| T[Wait for Others]
-        T --> S
-        S -->|Yes| U[Waiter Delivers]
+        S --> U{All Items Ready?}
+        U -->|No| V[Wait for Others]
+        V --> U
+        U -->|Yes| W[Waiter Delivers]
         
-        U --> V[Mark Served]
-        V --> W[Cashier Payment]
-        W --> X{Split Payment?}
+        W --> X[Mark Served]
+        X --> INV[Trigger: Decrement Inventory]
+        INV --> Y[Cashier Payment]
+        Y --> Z{Payment Type?}
         
-        X -->|No| Y[Single Payment]
-        X -->|Yes| Z[Split by Guest/Item]
+        Z -->|Single| AA[Single Payment]
+        Z -->|Split| AB[Split by Guest/Item]
+        Z -->|Consolidated| AC[Multiple Orders]
         
-        Y --> AA[Mark Paid]
-        Z --> AA
-        AA --> AB[End]
+        AA --> AD[Mark Paid]
+        AB --> AD
+        AC --> AD
+        AD --> AE[End]
     end
     
-    R --> AC[Notify Waiter]
-    AC --> AD[Handle Rejection]`
+    T --> AF[Notify Waiter]
+    AF --> AG[Handle Rejection]`
     }
   ];
 
@@ -426,7 +533,7 @@ const Documentation = () => {
                 <div className="text-sm text-muted-foreground">User Roles</div>
               </div>
               <div className="p-4 bg-muted rounded-lg">
-                <div className="text-3xl font-bold text-primary">14</div>
+                <div className="text-3xl font-bold text-primary">18</div>
                 <div className="text-sm text-muted-foreground">Database Tables</div>
               </div>
               <div className="p-4 bg-muted rounded-lg">
@@ -437,6 +544,17 @@ const Documentation = () => {
                 <div className="text-3xl font-bold text-primary">4</div>
                 <div className="text-sm text-muted-foreground">Station Types</div>
               </div>
+            </div>
+            <div className="mt-4 text-sm text-muted-foreground">
+              <p className="font-medium mb-2">Key Architecture Features:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Zone-based staff assignment with multi-zone support for station roles</li>
+                <li>Automatic inventory decrement on served status via database trigger</li>
+                <li>Zone-scoped inventory allocation and transfer tracking</li>
+                <li>Tenant-configurable currency with proper formatting</li>
+                <li>Real-time updates via Supabase subscriptions</li>
+                <li>Offline-tolerant waiter interface with request queuing</li>
+              </ul>
             </div>
           </CardContent>
         </Card>
