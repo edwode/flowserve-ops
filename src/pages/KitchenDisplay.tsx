@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -297,6 +297,22 @@ export default function KitchenDisplay() {
     await updateOrderItemStatus(itemId, "dispatched");
   };
 
+  // Sort orders by status priority (pending first) then by creation time (oldest first)
+  const sortedOrders = useMemo(() => {
+    const statusPriority: Record<string, number> = {
+      pending: 0,
+      dispatched: 1,
+      ready: 2,
+      served: 3,
+    };
+
+    return [...orderItems].sort((a, b) => {
+      const priorityDiff = statusPriority[a.status] - statusPriority[b.status];
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }, [orderItems]);
+
   const pendingItems = orderItems.filter((item) => item.status === "pending");
   const preparingItems = orderItems.filter((item) => item.status === "dispatched");
 
@@ -377,7 +393,7 @@ export default function KitchenDisplay() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {orderItems.map((item) => {
+            {sortedOrders.map((item) => {
               const elapsedMinutes = getElapsedTime(item.created_at);
               const isPriority = elapsedMinutes > 8;
 
