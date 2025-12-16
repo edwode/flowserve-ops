@@ -13,6 +13,7 @@ import { FloorMap } from "@/components/FloorMap";
 import { CriticalAlerts } from "@/components/CriticalAlerts";
 import { LiveOrderTracking } from "@/components/LiveOrderTracking";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
+import { useTenantCurrency } from "@/hooks/useTenantCurrency";
 
 interface Event {
   id: string;
@@ -60,6 +61,7 @@ const Manager = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, tenantId, loading: authLoading } = useAuthGuard();
+  const { formatPrice } = useTenantCurrency();
   const [loading, setLoading] = useState(true);
   const [assignedEvent, setAssignedEvent] = useState<Event | null>(null);
   const [assignedZones, setAssignedZones] = useState<Zone[]>([]);
@@ -544,7 +546,7 @@ const Manager = () => {
               <DollarSign className="h-4 w-4" />
               Revenue
             </div>
-            <div className="text-2xl font-bold">${metrics.totalRevenue.toFixed(0)}</div>
+            <div className="text-2xl font-bold">{formatPrice(metrics.totalRevenue)}</div>
           </Card>
 
           <Card className="p-4 transition-all duration-300 hover:shadow-lg animate-fade-in" style={{ animationDelay: '0.3s' }}>
