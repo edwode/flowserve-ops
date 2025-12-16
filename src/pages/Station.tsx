@@ -3,13 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, LogOut, AlertTriangle, CheckCircle, XCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, LogOut, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useTenantCurrency } from "@/hooks/useTenantCurrency";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,7 +71,6 @@ const Station = () => {
   const [returns, setReturns] = useState<OrderReturn[]>([]);
   const [stationType, setStationType] = useState<"drink_dispenser" | "meal_dispenser" | "mixologist" | "bar" | "">("");
   const [outOfStockItem, setOutOfStockItem] = useState<{ id: string; name: string } | null>(null);
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [userName, setUserName] = useState<string | null>(null);
   const [userZoneIds, setUserZoneIds] = useState<string[]>([]);
   const [userZoneNames, setUserZoneNames] = useState<string[]>([]);
@@ -91,49 +89,24 @@ const Station = () => {
     fetchUserName();
   }, [user]);
 
-  // Group order items by table name
-  const groupedOrders = useMemo(() => {
-    const groups: Record<string, OrderItem[]> = {};
+  // Sort order items by status priority (pending first) then by created_at ascending
+  const sortedOrders = useMemo(() => {
+    const statusPriority: Record<string, number> = {
+      'pending': 0,
+      'dispatched': 1,
+    };
     
-    orderItems.forEach((item) => {
-      const tableName = item.orders.table_number || 'No Table';
-      if (!groups[tableName]) {
-        groups[tableName] = [];
+    return [...orderItems].sort((a, b) => {
+      // First sort by status priority (pending first)
+      const priorityA = statusPriority[a.status] ?? 99;
+      const priorityB = statusPriority[b.status] ?? 99;
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
       }
-      groups[tableName].push(item);
+      // Then by created_at ascending (oldest first)
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
-
-    // Sort tables by the earliest order time within each group
-    const sortedEntries = Object.entries(groups).sort((a, b) => {
-      const earliestA = Math.min(...a[1].map(o => new Date(o.created_at).getTime()));
-      const earliestB = Math.min(...b[1].map(o => new Date(o.created_at).getTime()));
-      return earliestA - earliestB;
-    });
-
-    return sortedEntries;
   }, [orderItems]);
-
-  // Auto-expand all table groups initially and when new tables appear
-  useEffect(() => {
-    const allTableNames = new Set(groupedOrders.map(([tableName]) => tableName));
-    setExpandedTables((prev) => {
-      const newSet = new Set(prev);
-      allTableNames.forEach((name) => newSet.add(name));
-      return newSet;
-    });
-  }, [groupedOrders]);
-
-  const toggleTableExpanded = (tableName: string) => {
-    setExpandedTables((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(tableName)) {
-        newSet.delete(tableName);
-      } else {
-        newSet.add(tableName);
-      }
-      return newSet;
-    });
-  };
 
   useEffect(() => {
     if (!authLoading && user && tenantId) {
@@ -576,7 +549,7 @@ const Station = () => {
           </div>
         )}
 
-        {/* Order Items - Grouped by Table */}
+        {/* Order Items - Flat list sorted by status and time */}
         <div className="space-y-3">
           <h2 className="text-lg font-semibold">Active Orders</h2>
           
@@ -585,96 +558,64 @@ const Station = () => {
               <p className="text-muted-foreground">No pending orders</p>
             </Card>
           ) : (
-            groupedOrders.map(([tableName, items]) => (
-              <Collapsible
-                key={tableName}
-                open={expandedTables.has(tableName)}
-                onOpenChange={() => toggleTableExpanded(tableName)}
-              >
-                <Card className="overflow-hidden">
-                  <CollapsibleTrigger asChild>
-                    <button className="w-full p-4 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors">
-                      <div className="flex items-center gap-3">
-                        {expandedTables.has(tableName) ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        <span className="font-semibold">Table {tableName}</span>
-                        <Badge variant="secondary">{items.length} item{items.length !== 1 ? 's' : ''}</Badge>
-                      </div>
-                      {!expandedTables.has(tableName) && (
-                        <Badge className="bg-pending text-pending-foreground">
-                          {items.filter(i => i.status === 'pending').length} pending
-                        </Badge>
-                      )}
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="divide-y divide-border">
-                      {items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="p-4 hover:bg-accent/5 transition-colors"
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <div className="font-semibold text-lg">
-                                  {item.orders.order_number}
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {item.orders.guest_name && `${item.orders.guest_name}`}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  Waiter: {item.orders.profiles?.full_name || 'Unknown'}
-                                </div>
-                              </div>
-                              <Badge className={getStatusColor(item.status)}>
-                                {item.status}
-                              </Badge>
-                            </div>
-
-                            <div className="border-t border-border pt-3">
-                              <div className="font-medium">{item.menu_items.name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                Quantity: {item.quantity} • {formatPrice(item.menu_items.price)} each
-                              </div>
-                              {item.notes && (
-                                <div className="text-sm text-muted-foreground mt-1">
-                                  Notes: {item.notes}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="text-xs text-muted-foreground">
-                              Ordered: {new Date(item.created_at).toLocaleTimeString()}
-                            </div>
-
-                            <div className="flex gap-2">
-                              <Button
-                                className="flex-1"
-                                onClick={() => handleMarkReady(item.id)}
-                              >
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                Mark Ready
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                onClick={() => handleOutOfStock(item.menu_item_id, item.menu_items.name)}
-                              >
-                                <XCircle className="mr-2 h-4 w-4" />
-                                Out of Stock
-                              </Button>
-                            </div>
-                          </div>
+            <div className="space-y-3">
+              {sortedOrders.map((item) => (
+                <Card key={item.id} className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-semibold text-lg">
+                          {item.orders.order_number}
                         </div>
-                      ))}
+                        <div className="text-sm text-muted-foreground">
+                          Table {item.orders.table_number || 'N/A'}
+                          {item.orders.guest_name && ` • ${item.orders.guest_name}`}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Waiter: {item.orders.profiles?.full_name || 'Unknown'}
+                        </div>
+                      </div>
+                      <Badge className={getStatusColor(item.status)}>
+                        {item.status}
+                      </Badge>
                     </div>
-                  </CollapsibleContent>
+
+                    <div className="border-t border-border pt-3">
+                      <div className="font-medium">{item.menu_items.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Quantity: {item.quantity} • {formatPrice(item.menu_items.price)} each
+                      </div>
+                      {item.notes && (
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Notes: {item.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      Ordered: {new Date(item.created_at).toLocaleTimeString()}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1"
+                        onClick={() => handleMarkReady(item.id)}
+                      >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Mark Ready
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => handleOutOfStock(item.menu_item_id, item.menu_items.name)}
+                      >
+                        <XCircle className="mr-2 h-4 w-4" />
+                        Out of Stock
+                      </Button>
+                    </div>
+                  </div>
                 </Card>
-              </Collapsible>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </div>
