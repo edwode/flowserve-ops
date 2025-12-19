@@ -129,10 +129,35 @@ All colors MUST be HSL.
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    /* iOS safe area support */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    /* iOS smooth scrolling */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent pull-to-refresh on iOS */
+    overscroll-behavior-y: contain;
+    /* Prevent text selection on touch */
+    -webkit-touch-callout: none;
+    /* Fix for iOS height issues */
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+
+  /* iOS input zoom prevention */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Fix iOS button styling */
+  button {
+    -webkit-appearance: none;
   }
 }
 
@@ -167,5 +192,32 @@ All colors MUST be HSL.
     50% {
       opacity: .5;
     }
+  }
+
+  /* iOS Safe Area utilities */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+  
+  .safe-area-inset {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* iOS scroll container fix */
+  .ios-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
   }
 }
