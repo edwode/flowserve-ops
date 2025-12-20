@@ -170,7 +170,7 @@ export default function AdminSettings() {
   };
 
   if (!settings) {
-    return <div className="container mx-auto p-6">Loading...</div>;
+    return <div className="p-6">Loading...</div>;
   }
 
   const notifications = settings.theme_config.notifications || {};

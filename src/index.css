@@ -135,6 +135,8 @@ All colors MUST be HSL.
   html {
     /* iOS safe area support */
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    /* Fix for iOS Safari 100vh issue */
+    height: -webkit-fill-available;
   }
 
   body {
@@ -145,7 +147,7 @@ All colors MUST be HSL.
     overscroll-behavior-y: contain;
     /* Prevent text selection on touch */
     -webkit-touch-callout: none;
-    /* Fix for iOS height issues */
+    /* Fix for iOS height issues - use fill-available as fallback */
     min-height: 100vh;
     min-height: -webkit-fill-available;
   }
@@ -158,6 +160,12 @@ All colors MUST be HSL.
   /* Fix iOS button styling */
   button {
     -webkit-appearance: none;
+  }
+
+  /* Global fix for min-h-screen on iOS Safari */
+  .min-h-screen {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
   }
 }
 
