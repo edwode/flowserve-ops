@@ -70,7 +70,7 @@ export function AdminLayout() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -78,7 +78,7 @@ export function AdminLayout() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="flex w-full" style={{ minHeight: '-webkit-fill-available' }}>
         <AdminSidebar />
         
         <div className="flex-1 flex flex-col">
