@@ -328,9 +328,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       description: notification.message,
     });
 
-    // Show browser notification
-    if (notificationPermission === 'granted') {
-      new Notification(notification.title, {
+    // Show browser notification (only if supported)
+    if ('Notification' in window && notificationPermission === 'granted') {
+      new window.Notification(notification.title, {
         body: notification.message,
         icon: '/favicon.ico',
         badge: '/favicon.ico',
