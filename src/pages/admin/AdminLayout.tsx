@@ -11,6 +11,7 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
     checkAdminAccess();
@@ -25,7 +26,7 @@ export function AdminLayout() {
       
       if (!user) {
         console.log('[AdminLayout] No user, redirecting to auth');
-        navigate('/auth');
+        navigate('/auth', { replace: true });
         return;
       }
 
@@ -39,7 +40,7 @@ export function AdminLayout() {
 
       if (!profile?.tenant_id) {
         console.log('[AdminLayout] No tenant_id, redirecting to setup');
-        navigate('/setup');
+        navigate('/setup', { replace: true });
         return;
       }
 
@@ -59,11 +60,12 @@ export function AdminLayout() {
           description: "Only tenant admins can access this area",
           variant: "destructive",
         });
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
         return;
       }
       
       console.log('[AdminLayout] Access granted');
+      setHasAccess(true);
     } catch (error: any) {
       console.error('[AdminLayout] Error:', error);
       toast({
@@ -71,7 +73,7 @@ export function AdminLayout() {
         description: error.message,
         variant: "destructive",
       });
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } finally {
       console.log('[AdminLayout] Setting loading to false');
       setLoading(false);
@@ -83,9 +85,19 @@ export function AdminLayout() {
     navigate('/auth');
   };
 
+  // Show loading spinner while checking access
   if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Don't render admin content if user doesn't have access
+  if (!hasAccess) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
