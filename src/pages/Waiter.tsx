@@ -278,35 +278,36 @@ const Waiter = () => {
 
   if (loading || authLoading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center" style={{ backgroundColor: 'hsl(var(--background))' }}>
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ minHeight: '-webkit-fill-available', backgroundColor: 'hsl(var(--background))' }}>
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
-        <div className="flex items-center justify-between p-4">
-          <div>
-            <h1 className="text-xl font-bold">Waiter Station</h1>
-            <p className="text-sm text-muted-foreground">
-              {userName ? `Welcome, ${userName}` : 'Manage your orders'}
-            </p>
+    <div className="flex w-full bg-background" style={{ minHeight: '-webkit-fill-available' }}>
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <h1 className="text-xl font-bold">Waiter Station</h1>
+              <p className="text-sm text-muted-foreground">
+                {userName ? `Welcome, ${userName}` : 'Manage your orders'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <OfflineIndicator />
+              <NotificationBell />
+              <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <OfflineIndicator />
-            <NotificationBell />
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </div>
+        </header>
 
-      {/* Content */}
-      <div className="p-4 space-y-4">
+        {/* Content */}
+        <main className="flex-1 overflow-auto p-4 space-y-4">
         {/* Create Order Button */}
         <Button
           size="lg"
@@ -404,6 +405,7 @@ const Waiter = () => {
             </div>
           )}
         </div>
+        </main>
       </div>
     </div>
   );
