@@ -450,7 +450,7 @@ const Manager = () => {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -459,7 +459,7 @@ const Manager = () => {
   // Show message if no event or zones assigned
   if (!assignedEvent || assignedZones.length === 0) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      <div className="fixed inset-0 bg-background flex flex-col items-center justify-center p-4">
         <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
         <h1 className="text-xl font-bold mb-2">No Assignments Found</h1>
         <p className="text-muted-foreground text-center mb-4">
@@ -476,7 +476,7 @@ const Manager = () => {
   const totalActive = orderStats.pending + orderStats.dispatched + orderStats.ready + orderStats.served;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background" style={{ minHeight: '-webkit-fill-available' }}>
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
         <div className="flex items-center justify-between p-4">
