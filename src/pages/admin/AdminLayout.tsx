@@ -17,32 +17,43 @@ export function AdminLayout() {
   }, []);
 
   const checkAdminAccess = async () => {
+    console.log('[AdminLayout] Starting checkAdminAccess');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      console.log('[AdminLayout] Getting user...');
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      console.log('[AdminLayout] User result:', { user: user?.id, error: userError });
+      
       if (!user) {
+        console.log('[AdminLayout] No user, redirecting to auth');
         navigate('/auth');
         return;
       }
 
-      const { data: profile } = await supabase
+      console.log('[AdminLayout] Fetching profile...');
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('tenant_id')
         .eq('id', user.id)
         .single();
+      console.log('[AdminLayout] Profile result:', { profile, error: profileError });
 
       if (!profile?.tenant_id) {
+        console.log('[AdminLayout] No tenant_id, redirecting to setup');
         navigate('/setup');
         return;
       }
 
-      const { data: userRole } = await supabase
+      console.log('[AdminLayout] Fetching user role...');
+      const { data: userRole, error: roleError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', user.id)
         .eq('tenant_id', profile.tenant_id)
         .single();
+      console.log('[AdminLayout] Role result:', { userRole, error: roleError });
 
       if (!userRole || userRole.role !== 'tenant_admin') {
+        console.log('[AdminLayout] Not admin, redirecting to dashboard');
         toast({
           title: "Access denied",
           description: "Only tenant admins can access this area",
@@ -51,7 +62,10 @@ export function AdminLayout() {
         navigate('/dashboard');
         return;
       }
+      
+      console.log('[AdminLayout] Access granted');
     } catch (error: any) {
+      console.error('[AdminLayout] Error:', error);
       toast({
         title: "Error",
         description: error.message,
@@ -59,6 +73,7 @@ export function AdminLayout() {
       });
       navigate('/dashboard');
     } finally {
+      console.log('[AdminLayout] Setting loading to false');
       setLoading(false);
     }
   };
