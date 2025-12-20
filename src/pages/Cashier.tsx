@@ -915,7 +915,7 @@ const Cashier = () => {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -924,7 +924,7 @@ const Cashier = () => {
   // Show warning if no zones assigned
   if (userZoneIds.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="bg-background" style={{ minHeight: '-webkit-fill-available' }}>
         <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
           <div className="flex items-center justify-between p-4">
             <div>
@@ -955,7 +955,7 @@ const Cashier = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background" style={{ minHeight: '-webkit-fill-available' }}>
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
         <div className="flex items-center justify-between p-4">

@@ -278,14 +278,14 @@ const Waiter = () => {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background" style={{ minHeight: '-webkit-fill-available' }}>
       {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b border-border shadow-sm">
         <div className="flex items-center justify-between p-4">
