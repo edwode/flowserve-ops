@@ -84,7 +84,17 @@ interface MealDispenserStaff {
   total_revenue: number;
 }
 
-type ReportCardId = 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance' | 'drinkDispenser' | 'drinkDispenserStaff' | 'mixologistStaff' | 'mealDispenserStaff';
+interface OutstandingOrder {
+  order_number: string;
+  table_number: string | null;
+  guest_name: string | null;
+  waiter_name: string;
+  status: string;
+  total_amount: number;
+  created_at: string;
+}
+
+type ReportCardId = 'outstandingOrders' | 'topItems' | 'waiterPerformance' | 'hourlySales' | 'cashierPerformance' | 'drinkDispenser' | 'drinkDispenserStaff' | 'mixologistStaff' | 'mealDispenserStaff';
 
 interface ReportCardState {
   id: ReportCardId;
@@ -112,8 +122,10 @@ export function AdminReports() {
   const [drinkDispenserStaff, setDrinkDispenserStaff] = useState<DrinkDispenserStaff[]>([]);
   const [mixologistStaff, setMixologistStaff] = useState<MixologistStaff[]>([]);
   const [mealDispenserStaff, setMealDispenserStaff] = useState<MealDispenserStaff[]>([]);
+  const [outstandingOrders, setOutstandingOrders] = useState<OutstandingOrder[]>([]);
   
   const [reportCards, setReportCards] = useState<ReportCardState[]>([
+    { id: 'outstandingOrders', title: 'Outstanding Orders', isOpen: true },
     { id: 'topItems', title: 'Top Selling Items', isOpen: true },
     { id: 'waiterPerformance', title: 'Waiter Performance', isOpen: true },
     { id: 'cashierPerformance', title: 'Top Sales per Cashier', isOpen: true },
@@ -186,6 +198,7 @@ export function AdminReports() {
       fetchDrinkDispenserStaff(),
       fetchMixologistStaff(),
       fetchMealDispenserStaff(),
+      fetchOutstandingOrders(),
     ]);
   };
 
@@ -535,6 +548,41 @@ export function AdminReports() {
     }
   };
 
+  const fetchOutstandingOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          order_number,
+          table_number,
+          guest_name,
+          status,
+          total_amount,
+          created_at,
+          profiles!orders_waiter_id_fkey (full_name)
+        `)
+        .eq('event_id', selectedEvent)
+        .neq('status', 'paid')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const orders: OutstandingOrder[] = (data || []).map((order: any) => ({
+        order_number: order.order_number,
+        table_number: order.table_number,
+        guest_name: order.guest_name,
+        waiter_name: order.profiles?.full_name || 'Unknown',
+        status: order.status,
+        total_amount: order.total_amount || 0,
+        created_at: order.created_at,
+      }));
+
+      setOutstandingOrders(orders);
+    } catch (error: any) {
+      console.error("Error fetching outstanding orders:", error);
+    }
+  };
+
   const handleExportCSV = async () => {
     try {
       const { data: orders, error } = await supabase
@@ -713,6 +761,45 @@ export function AdminReports() {
                 </div>
                 <CollapsibleContent>
                   <div className="p-6 pt-4">
+                    {card.id === 'outstandingOrders' && (
+                      <div className="space-y-3">
+                        {outstandingOrders.map((order) => (
+                          <div key={order.order_number} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{order.order_number}</span>
+                                {order.table_number && (
+                                  <span className="text-sm text-muted-foreground">• Table {order.table_number}</span>
+                                )}
+                                {order.guest_name && (
+                                  <span className="text-sm text-muted-foreground">• {order.guest_name}</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground mt-1">
+                                Waiter: {order.waiter_name} • {new Date(order.created_at).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                order.status === 'pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                order.status === 'ready' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                                order.status === 'served' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+                              }`}>
+                                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                              </span>
+                              <span className="font-bold">{formatPrice(order.total_amount)}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {outstandingOrders.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            All orders are paid! 🎉
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {card.id === 'topItems' && (
                       <div className="space-y-3">
                         {topItems.map((item, index) => (
