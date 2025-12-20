@@ -78,7 +78,7 @@ export function NotificationBell() {
             )}
           </div>
           
-          {Notification.permission === 'default' && (
+          {typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default' && (
             <Button
               variant="outline"
               size="sm"
