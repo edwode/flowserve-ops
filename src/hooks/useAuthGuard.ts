@@ -75,15 +75,16 @@ export const useAuthGuard = (): UseAuthGuardResult => {
         .single();
 
       if (error || !profile?.tenant_id) {
-        navigate('/setup');
+        setLoading(false);
+        navigate('/setup', { replace: true });
         return;
       }
 
       setTenantId(profile.tenant_id);
-    } catch {
-      navigate('/setup');
-    } finally {
       setLoading(false);
+    } catch {
+      setLoading(false);
+      navigate('/setup', { replace: true });
     }
   };
 
