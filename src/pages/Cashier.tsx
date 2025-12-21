@@ -79,6 +79,18 @@ interface OrderReturn {
   };
 }
 
+interface RejectedItem {
+  id: string;
+  type: 'rejected';
+  quantity: number;
+  price: number;
+  created_at: string;
+  menu_item_name: string;
+  order_number: string;
+  table_number: string;
+  waiter_name: string | null;
+}
+
 interface ConsolidatedPaymentGroup {
   tableNumber: string;
   paidAt: string;
@@ -108,6 +120,7 @@ const Cashier = () => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<OrderReturn[]>([]);
+  const [rejectedItems, setRejectedItems] = useState<RejectedItem[]>([]);
   const [consolidatedGroups, setConsolidatedGroups] = useState<ConsolidatedPaymentGroup[]>([]);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -164,9 +177,11 @@ const Cashier = () => {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
   }, [orders]);
 
-  // Group returns by table for Returns tab
-  const groupedReturns = useMemo(() => {
-    const groups: Record<string, OrderReturn[]> = {};
+  // Group returns and rejections by table for Returns tab
+  const groupedReturnsAndRejections = useMemo(() => {
+    const groups: Record<string, Array<OrderReturn | RejectedItem>> = {};
+    
+    // Add confirmed returns
     returns.forEach((returnItem) => {
       const tableKey = returnItem.order_items.orders.table_number || 'No Table';
       if (!groups[tableKey]) {
@@ -174,8 +189,18 @@ const Cashier = () => {
       }
       groups[tableKey].push(returnItem);
     });
+    
+    // Add rejected items
+    rejectedItems.forEach((rejectedItem) => {
+      const tableKey = rejectedItem.table_number || 'No Table';
+      if (!groups[tableKey]) {
+        groups[tableKey] = [];
+      }
+      groups[tableKey].push(rejectedItem);
+    });
+    
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [returns]);
+  }, [returns, rejectedItems]);
 
   // Get selected orders for consolidation
   const selectedOrders = useMemo(() => {
@@ -268,10 +293,10 @@ const Cashier = () => {
   }, [groupedOrders.length]);
 
   useEffect(() => {
-    if (groupedReturns.length > 0) {
-      setExpandedReturnTables(new Set(groupedReturns.map(([tableKey]) => tableKey)));
+    if (groupedReturnsAndRejections.length > 0) {
+      setExpandedReturnTables(new Set(groupedReturnsAndRejections.map(([tableKey]) => tableKey)));
     }
-  }, [groupedReturns.length]);
+  }, [groupedReturnsAndRejections.length]);
 
   useEffect(() => {
     if (consolidatedGroups.length > 0) {
@@ -339,6 +364,18 @@ const Cashier = () => {
           fetchReturns();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items'
+        },
+        () => {
+          fetchOrders();
+          fetchRejectedItems();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -348,7 +385,12 @@ const Cashier = () => {
 
   const fetchData = async (zoneIds?: string[]) => {
     const zones = zoneIds || userZoneIds;
-    await Promise.all([fetchOrders(showPaidOrders, zones), fetchReturns(zones), fetchConsolidatedPayments(zones)]);
+    await Promise.all([
+      fetchOrders(showPaidOrders, zones), 
+      fetchReturns(zones), 
+      fetchRejectedItems(zones),
+      fetchConsolidatedPayments(zones)
+    ]);
     setLoading(false);
   };
 
@@ -400,31 +442,32 @@ const Cashier = () => {
 
       if (error) throw error;
       
-      // Transform the data to match our Order interface and filter out returned items
+      // Transform the data to match our Order interface and filter out returned/rejected items
       const transformedData = (data || [])
         // Filter to only orders from tables in the cashier's zones
         .filter(order => order.table_number && tablesInZones.has(order.table_number))
         .map(order => {
-          const nonReturnedItems = order.order_items
-            ?.filter(item => item.status !== 'returned')
+          // Filter out returned and rejected items from the bill
+          const billableItems = order.order_items
+            ?.filter(item => item.status !== 'returned' && item.status !== 'rejected')
             .map(item => ({
               ...item,
               menu_item: item.menu_items
             }));
           
-          // Recalculate total based on non-returned items
-          const recalculatedTotal = nonReturnedItems?.reduce(
+          // Recalculate total based on billable items only
+          const recalculatedTotal = billableItems?.reduce(
             (sum, item) => sum + (item.price * item.quantity), 
             0
           ) || 0;
           
           return {
             ...order,
-            order_items: nonReturnedItems,
+            order_items: billableItems,
             total_amount: recalculatedTotal
           };
         })
-        // Remove orders where all items have been returned
+        // Remove orders where all items have been returned/rejected
         .filter(order => order.order_items && order.order_items.length > 0);
       
       setOrders(transformedData);
@@ -486,6 +529,72 @@ const Cashier = () => {
     } catch (error: any) {
       toast({
         title: "Error loading returns",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchRejectedItems = async (zoneIds?: string[]) => {
+    const zones = zoneIds || userZoneIds;
+    try {
+      if (zones.length === 0) {
+        setRejectedItems([]);
+        return;
+      }
+
+      // First get tables in the user's assigned zones
+      const { data: tablesData, error: tablesError } = await supabase
+        .from('tables')
+        .select('table_number')
+        .in('zone_id', zones);
+
+      if (tablesError) throw tablesError;
+
+      const tablesInZones = new Set(tablesData?.map(t => t.table_number) || []);
+
+      // Fetch rejected order items with their order and menu item info
+      const { data, error } = await supabase
+        .from('order_items')
+        .select(`
+          id,
+          quantity,
+          price,
+          created_at,
+          menu_items (name),
+          orders (
+            order_number, 
+            table_number,
+            profiles!orders_waiter_id_fkey (full_name)
+          )
+        `)
+        .eq('status', 'rejected')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Filter and transform rejected items
+      const transformedItems: RejectedItem[] = (data || [])
+        .filter(item => {
+          const tableNumber = (item.orders as any)?.table_number;
+          return tableNumber && tablesInZones.has(tableNumber);
+        })
+        .map(item => ({
+          id: item.id,
+          type: 'rejected' as const,
+          quantity: item.quantity,
+          price: item.price,
+          created_at: item.created_at,
+          menu_item_name: (item.menu_items as any)?.name || 'Unknown Item',
+          order_number: (item.orders as any)?.order_number || 'Unknown',
+          table_number: (item.orders as any)?.table_number || 'No Table',
+          waiter_name: (item.orders as any)?.profiles?.full_name || null,
+        }));
+
+      setRejectedItems(transformedItems);
+    } catch (error: any) {
+      toast({
+        title: "Error loading rejected items",
         description: error.message,
         variant: "destructive",
       });
@@ -1299,12 +1408,12 @@ const Cashier = () => {
 
           {/* Returns Tab */}
           <TabsContent value="returns" className="space-y-3">
-            {returns.length === 0 ? (
+            {returns.length === 0 && rejectedItems.length === 0 ? (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">No confirmed returns</p>
+                <p className="text-muted-foreground">No returns or rejected items</p>
               </Card>
             ) : (
-              groupedReturns.map(([tableKey, tableReturns]) => (
+              groupedReturnsAndRejections.map(([tableKey, tableItems]) => (
                 <Collapsible
                   key={tableKey}
                   open={expandedReturnTables.has(tableKey)}
@@ -1322,69 +1431,113 @@ const Cashier = () => {
                           <div>
                             <h3 className="font-semibold">Table {tableKey}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {tableReturns.length} return{tableReturns.length !== 1 ? 's' : ''}
+                              {tableItems.length} item{tableItems.length !== 1 ? 's' : ''}
                             </p>
                           </div>
                         </div>
                         <Badge variant="destructive">
-                          {tableReturns.length}
+                          {tableItems.length}
                         </Badge>
                       </div>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <div className="border-t border-border divide-y divide-border">
-                        {tableReturns.map((returnItem) => (
-                          <div
-                            key={returnItem.id}
-                            className="p-4"
-                          >
-                            <div className="space-y-3">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="font-semibold">
-                                    {returnItem.order_items.orders.order_number}
+                        {tableItems.map((item) => {
+                          // Check if it's a rejected item
+                          const isRejected = 'type' in item && item.type === 'rejected';
+                          
+                          if (isRejected) {
+                            const rejectedItem = item as RejectedItem;
+                            return (
+                              <div key={rejectedItem.id} className="p-4">
+                                <div className="space-y-3">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <div className="font-semibold">
+                                        {rejectedItem.order_number}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        Waiter: {rejectedItem.waiter_name || 'Unknown'}
+                                      </div>
+                                    </div>
+                                    <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                                      <AlertCircle className="mr-1 h-3 w-3" />
+                                      Rejected
+                                    </Badge>
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    Reported by: {returnItem.profiles?.full_name || 'Unknown'}
+
+                                  <div className="border-t border-border pt-3">
+                                    <div className="font-medium">
+                                      {rejectedItem.menu_item_name}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">
+                                      Qty: {rejectedItem.quantity} • 
+                                      {formatPrice(rejectedItem.price)} each
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center justify-between border-t border-border pt-3">
+                                    <div className="text-lg font-bold">
+                                      Removed from bill: {formatPrice(rejectedItem.price * rejectedItem.quantity)}
+                                    </div>
                                   </div>
                                 </div>
-                                <Badge variant="destructive">
-                                  <AlertTriangle className="mr-1 h-3 w-3" />
-                                  Return
-                                </Badge>
                               </div>
+                            );
+                          } else {
+                            // It's a return item
+                            const returnItem = item as OrderReturn;
+                            return (
+                              <div key={returnItem.id} className="p-4">
+                                <div className="space-y-3">
+                                  <div className="flex items-start justify-between">
+                                    <div>
+                                      <div className="font-semibold">
+                                        {returnItem.order_items.orders.order_number}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        Reported by: {returnItem.profiles?.full_name || 'Unknown'}
+                                      </div>
+                                    </div>
+                                    <Badge variant="destructive">
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      Return
+                                    </Badge>
+                                  </div>
 
-                              <div className="border-t border-border pt-3">
-                                <div className="font-medium">
-                                  {returnItem.order_items.menu_items.name}
-                                </div>
-                                <div className="text-sm text-muted-foreground">
-                                  Qty: {returnItem.order_items.quantity} • 
-                                  {formatPrice(returnItem.order_items.price)} each
-                                </div>
-                                <div className="text-sm text-destructive mt-2">
-                                  Reason: {returnItem.reason}
-                                </div>
-                              </div>
+                                  <div className="border-t border-border pt-3">
+                                    <div className="font-medium">
+                                      {returnItem.order_items.menu_items.name}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">
+                                      Qty: {returnItem.order_items.quantity} • 
+                                      {formatPrice(returnItem.order_items.price)} each
+                                    </div>
+                                    <div className="text-sm text-destructive mt-2">
+                                      Reason: {returnItem.reason}
+                                    </div>
+                                  </div>
 
-                              <div className="flex items-center justify-between border-t border-border pt-3">
-                                <div className="text-lg font-bold">
-                                  Loss: {formatPrice(returnItem.refund_amount || 
-                                    returnItem.order_items.price * returnItem.order_items.quantity
-                                  )}
+                                  <div className="flex items-center justify-between border-t border-border pt-3">
+                                    <div className="text-lg font-bold">
+                                      Loss: {formatPrice(returnItem.refund_amount || 
+                                        returnItem.order_items.price * returnItem.order_items.quantity
+                                      )}
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => !returnItem.refund_amount && handleConfirmRevenueLoss(returnItem)}
+                                      disabled={!!returnItem.refund_amount}
+                                      className={returnItem.refund_amount ? "opacity-50 cursor-not-allowed" : ""}
+                                    >
+                                      {returnItem.refund_amount ? "Loss Confirmed" : "Confirm Revenue Loss"}
+                                    </Button>
+                                  </div>
                                 </div>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => !returnItem.refund_amount && handleConfirmRevenueLoss(returnItem)}
-                                  disabled={!!returnItem.refund_amount}
-                                  className={returnItem.refund_amount ? "opacity-50 cursor-not-allowed" : ""}
-                                >
-                                  {returnItem.refund_amount ? "Loss Confirmed" : "Confirm Revenue Loss"}
-                                </Button>
                               </div>
-                            </div>
-                          </div>
-                        ))}
+                            );
+                          }
+                        })}
                       </div>
                     </CollapsibleContent>
                   </Card>
