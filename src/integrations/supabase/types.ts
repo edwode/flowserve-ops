@@ -1196,6 +1196,15 @@ export type Database = {
           total_items: number
         }[]
       }
+      get_table_schema: {
+        Args: never
+        Returns: {
+          column_name: unknown
+          data_type: string
+          is_nullable: string
+          table_name: unknown
+        }[]
+      }
       get_user_tenant: { Args: { _user_id: string }; Returns: string }
       get_waiter_performance: {
         Args: { _end_date: string; _start_date: string; _tenant_id: string }
