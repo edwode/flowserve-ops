@@ -185,7 +185,11 @@ const OrderDetails = () => {
     if (!order) return;
 
     try {
-      const allReady = orderItems.every(item => 
+      // Exclude rejected/returned items from the check - they won't be served
+      const activeItems = orderItems.filter(item => 
+        item.status !== 'rejected' && item.status !== 'returned'
+      );
+      const allReady = activeItems.length > 0 && activeItems.every(item => 
         item.status === 'ready' || item.status === 'served'
       );
 
@@ -351,7 +355,11 @@ const OrderDetails = () => {
     );
   }
 
-  const allReady = orderItems.every(item => 
+  // Exclude rejected/returned items from the check - they won't be served
+  const activeItems = orderItems.filter(item => 
+    item.status !== 'rejected' && item.status !== 'returned'
+  );
+  const allReady = activeItems.length > 0 && activeItems.every(item => 
     item.status === 'ready' || item.status === 'served'
   );
 
